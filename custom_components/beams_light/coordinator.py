@@ -296,14 +296,20 @@ def _as_float_list(value: Any) -> list[float]:
 
 
 def _value_for_height_from_channel(channel: dict[str, Any], height_cm: int) -> float | None:
-    """Extract one channel's PPFD coefficient for a given height from a channel dict."""
+    """Extract one channel's PPFD coefficient for a given height from a channel dict.
+
+    Controller payloads are not identical across firmware builds. Some expose
+    height-specific PPFD directly on the channel object, while others keep it
+    under nested LED records. For nested LED records we sum the per-LED values
+    to get the channel coefficient for the requested height.
+    """
     for key, value in channel.items():
         if _key_matches_height(key, height_cm):
             number = _safe_float(value)
             if number is not None:
                 return number
             if isinstance(value, dict):
-                for nested_key in ("value", "ppfd", "PPFD", "par", "PAR"):
+                for nested_key in ("value", "ppfd", "PPFD", "par", "PAR", "totalPPFD", "totalPpfd", "total_ppfd"):
                     number = _safe_float(value.get(nested_key))
                     if number is not None:
                         return number
@@ -317,9 +323,10 @@ def _value_for_height_from_channel(channel: dict[str, Any], height_cm: int) -> f
                     if number is not None:
                         return number
                     if isinstance(value, dict):
-                        number = _safe_float(value.get("value"))
-                        if number is not None:
-                            return number
+                        for value_key in ("value", "ppfd", "PPFD", "par", "PAR", "totalPPFD", "totalPpfd", "total_ppfd"):
+                            number = _safe_float(value.get(value_key))
+                            if number is not None:
+                                return number
         elif isinstance(nested, list):
             for item in nested:
                 if not isinstance(item, dict):
@@ -331,10 +338,32 @@ def _value_for_height_from_channel(channel: dict[str, Any], height_cm: int) -> f
                         break
                 if item_height != height_cm:
                     continue
-                for value_key in ("value", "ppfd", "PPFD", "par", "PAR"):
+                for value_key in ("value", "ppfd", "PPFD", "par", "PAR", "totalPPFD", "totalPpfd", "total_ppfd"):
                     number = _safe_float(item.get(value_key))
                     if number is not None:
                         return number
+
+    # Some /api/kit payloads expose detailed LED records inside a channel, e.g.
+    # {"channels": [{"leds": [{"ppfd": {"25": ...}}, ...]}]}. Sum them so
+    # @35/@45 can be calculated from real controller data instead of distance
+    # approximations.
+    for leds_key in ("leds", "LEDs", "diodes", "items"):
+        leds = channel.get(leds_key)
+        if not isinstance(leds, list):
+            continue
+        total = 0.0
+        found = False
+        for led in leds:
+            if not isinstance(led, dict):
+                continue
+            number = _value_for_height_from_channel(led, height_cm)
+            if number is None:
+                continue
+            total += number
+            found = True
+        if found:
+            return total
+
     return None
 
 

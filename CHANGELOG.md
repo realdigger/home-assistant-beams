@@ -1,3 +1,13 @@
+## 0.8.3
+
+- PPFD sensors now display whole-number values without decimal places.
+- Rounding is applied only to the displayed sensor value; internal PPFD calculation is unchanged.
+
+## 0.8.2
+
+- Improved PPFD @35 cm and PPFD @45 cm lookup: the integration now searches height-specific coefficients not only at the channel level, but also inside nested LED records from `/api/kit`.
+- Removed inverse-square distance approximations; only controller-provided data is used.
+
 # Changelog
 
 ## 0.8.1

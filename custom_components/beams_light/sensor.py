@@ -35,6 +35,13 @@ def _format_uptime(seconds: float | None) -> str | None:
     return f"{days} д {hours} ч {minutes:02d} мин"
 
 
+def _format_ppfd(value: float | None) -> int | None:
+    """Format PPFD as a whole number for display."""
+    if value is None:
+        return None
+    return int(max(float(value), 0.0) + 0.5)
+
+
 def _format_cycle_timepoint(seconds: float | None) -> str | None:
     """Format a daily-cycle timepoint as hours and minutes."""
     if seconds is None:
@@ -64,7 +71,7 @@ SENSORS: tuple[BeamsSensorEntityDescription, ...] = (
         name="PPFD @25 cm",
         native_unit_of_measurement="µmol/m²/s",
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda coordinator: coordinator.ppfd_25cm,
+        value_fn=lambda coordinator: _format_ppfd(coordinator.ppfd_25cm),
     ),
     BeamsSensorEntityDescription(
         key="ppfd_35cm",
@@ -72,7 +79,7 @@ SENSORS: tuple[BeamsSensorEntityDescription, ...] = (
         name="PPFD @35 cm",
         native_unit_of_measurement="µmol/m²/s",
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda coordinator: coordinator.ppfd_35cm,
+        value_fn=lambda coordinator: _format_ppfd(coordinator.ppfd_35cm),
     ),
     BeamsSensorEntityDescription(
         key="ppfd_45cm",
@@ -80,7 +87,7 @@ SENSORS: tuple[BeamsSensorEntityDescription, ...] = (
         name="PPFD @45 cm",
         native_unit_of_measurement="µmol/m²/s",
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda coordinator: coordinator.ppfd_45cm,
+        value_fn=lambda coordinator: _format_ppfd(coordinator.ppfd_45cm),
     ),
 
     BeamsSensorEntityDescription(
