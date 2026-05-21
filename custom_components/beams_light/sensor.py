@@ -7,7 +7,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorEntityDescription, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfPower, UnitOfTime
+from homeassistant.const import UnitOfPower
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -24,6 +24,32 @@ class BeamsSensorEntityDescription(SensorEntityDescription):
     value_fn: Callable[[BeamsCoordinator], Any]
 
 
+def _format_uptime(seconds: float | None) -> str | None:
+    """Format uptime as days, hours, and minutes."""
+    if seconds is None:
+        return None
+    total = max(int(seconds), 0)
+    days = total // 86400
+    hours = (total % 86400) // 3600
+    minutes = (total % 3600) // 60
+    return f"{days} д {hours} ч {minutes:02d} мин"
+
+
+def _format_cycle_timepoint(seconds: float | None) -> str | None:
+    """Format a daily-cycle timepoint as hours and minutes."""
+    if seconds is None:
+        return None
+    total = max(int(seconds), 0)
+    if total >= 86400:
+        hours = 24
+        minutes = 0
+    else:
+        total = total % 86400
+        hours = total // 3600
+        minutes = (total % 3600) // 60
+    return f"{hours} ч {minutes:02d} мин"
+
+
 SENSORS: tuple[BeamsSensorEntityDescription, ...] = (
     BeamsSensorEntityDescription(
         key="current_cycle_dli",
@@ -31,7 +57,7 @@ SENSORS: tuple[BeamsSensorEntityDescription, ...] = (
         name="Current cycle DLI",
         native_unit_of_measurement="mol/m²/day",
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda coordinator: round(coordinator.current_cycle_dli, 3) if coordinator.current_cycle_dli is not None else None,
+        value_fn=lambda coordinator: round(coordinator.current_cycle_dli, 1) if coordinator.current_cycle_dli is not None else None,
     ),
     BeamsSensorEntityDescription(
         key="ppfd_25cm",
@@ -69,10 +95,8 @@ SENSORS: tuple[BeamsSensorEntityDescription, ...] = (
         key="uptime",
         translation_key="uptime",
         name="Uptime",
-        native_unit_of_measurement=UnitOfTime.SECONDS,
-        device_class=SensorDeviceClass.DURATION,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda coordinator: coordinator.uptime_seconds,
+        value_fn=lambda coordinator: _format_uptime(coordinator.uptime_seconds),
     ),
     BeamsSensorEntityDescription(
         key="estimated_power",
@@ -87,9 +111,7 @@ SENSORS: tuple[BeamsSensorEntityDescription, ...] = (
         key="timepoint",
         translation_key="timepoint",
         name="Cycle timepoint",
-        native_unit_of_measurement=UnitOfTime.SECONDS,
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda coordinator: coordinator.timepoint,
+        value_fn=lambda coordinator: _format_cycle_timepoint(coordinator.timepoint),
     ),
 )
 

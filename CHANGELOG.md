@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.7
+
+- Current cycle DLI is now rounded to one decimal place.
+
+## 0.7.6
+
+- Changed `sensor.beams_light_uptime` display format to days, hours, and minutes, for example `2 д 5 ч 17 мин`.
+- Changed `sensor.beams_light_cycle_timepoint` display format to hours and minutes, for example `12 ч 30 мин`.
+
 ## 0.7.5
 
 - Added a README disclaimer that the project is not affiliated with, endorsed by, or supported by BeautifulReef or BEAMS.

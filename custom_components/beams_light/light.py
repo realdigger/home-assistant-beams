@@ -54,7 +54,7 @@ class BeamsLight(BeamsEntity, LightEntity):
             "slave": bool((self.coordinator.data or {}).get("slave", False)),
         }
         if self.coordinator.dli is not None:
-            attrs["dli"] = round(self.coordinator.dli, 3)
+            attrs["dli"] = round(self.coordinator.dli, 1)
         if self.coordinator.estimated_power is not None:
             attrs["estimated_power_w"] = self.coordinator.estimated_power
         spectrum = self.coordinator.current_spectrum

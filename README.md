@@ -122,6 +122,8 @@ sensor.beams_light_uptime
 sensor.beams_light_cycle_timepoint
 ```
 
+`uptime` is displayed as days, hours, and minutes. `cycle_timepoint` is displayed as hours and minutes.
+
 DLI is calculated from the current daily cycle data exposed by the controller.
 
 ## Services
