@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.1
+
+- Fixed the `PPFD @35 cm` and `PPFD @45 cm` fallback: removed inverse-square distance estimation because it underestimates values for an extended aquarium light.
+- `@35 cm` and `@45 cm` now use only exact per-height coefficients or controller-provided height ratios when available.
+- If exact data is not exposed by the controller, the sensor stays `unknown` instead of showing a wrong estimate.
+- The PPFD sensor `source` attribute now explains why a value could not be calculated.
+
 ## 0.8.0
 
 - Fixed PPFD display: `@25 cm` now falls back to `kit.channels[*].totalPPFD`, the same data source used for DLI calculation.

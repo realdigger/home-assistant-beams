@@ -192,6 +192,24 @@ PPFD_HEIGHT_FIELD_KEYS = (
     "distance_cm",
     "cm",
 )
+PPFD_RATIO_CONTEXT_TOKENS = (
+    "ratio",
+    "factor",
+    "scale",
+    "distance",
+    "height",
+    "attenuation",
+    "correction",
+)
+PPFD_RATIO_VALUE_KEYS = (
+    "ratio",
+    "factor",
+    "scale",
+    "value",
+    "coefficient",
+    "coef",
+    "k",
+)
 
 
 def _height_from_value(value: Any) -> int | None:
@@ -209,6 +227,11 @@ def _height_from_value(value: Any) -> int | None:
 def _is_ppfd_context_key(key: Any) -> bool:
     normalized = str(key).lower()
     return any(token in normalized for token in PPFD_CONTEXT_TOKENS)
+
+
+def _is_ppfd_ratio_context_key(key: Any) -> bool:
+    normalized = str(key).lower()
+    return _is_ppfd_context_key(key) or any(token in normalized for token in PPFD_RATIO_CONTEXT_TOKENS)
 
 
 def _key_matches_height(key: Any, height_cm: int) -> bool:
@@ -398,6 +421,79 @@ def _find_ppfd_coefficients_for_height(
                 return result
 
     return []
+
+
+def _find_ppfd_ratio_for_height(
+    value: Any,
+    height_cm: int,
+    *,
+    max_depth: int = 7,
+    in_ratio_context: bool = False,
+) -> float | None:
+    """Find a height-specific PPFD ratio/factor in controller payloads.
+
+    Some firmware builds expose @35/@45 cm PPFD not as per-channel arrays, but as
+    correction ratios relative to the native @25 cm totalPPFD. This searches only
+    PPFD/distance/height-related subtrees to avoid treating unrelated values as
+    PPFD corrections.
+    """
+    if max_depth < 0:
+        return None
+
+    if isinstance(value, dict):
+        current_context = in_ratio_context
+
+        # Common structures:
+        # {"ppfdRatios": {"25": 1, "35": 0.8, "45": 0.7}}
+        # {"distanceFactors": {"25cm": {"value": 1}, "35cm": {"value": 0.8}}}
+        if current_context:
+            for key, child in value.items():
+                if not _key_matches_height(key, height_cm):
+                    continue
+                number = _safe_float(child)
+                if number is not None:
+                    return number
+                if isinstance(child, dict):
+                    for value_key in PPFD_RATIO_VALUE_KEYS:
+                        number = _safe_float(child.get(value_key))
+                        if number is not None:
+                            return number
+
+        # Common structures:
+        # {"height": 35, "ratio": 0.8}
+        item_height = None
+        for height_key in PPFD_HEIGHT_FIELD_KEYS:
+            if height_key in value:
+                item_height = _height_from_value(value.get(height_key))
+                break
+        if current_context and item_height == height_cm:
+            for value_key in PPFD_RATIO_VALUE_KEYS:
+                number = _safe_float(value.get(value_key))
+                if number is not None:
+                    return number
+
+        for key, child in value.items():
+            found = _find_ppfd_ratio_for_height(
+                child,
+                height_cm,
+                max_depth=max_depth - 1,
+                in_ratio_context=current_context or _is_ppfd_ratio_context_key(key),
+            )
+            if found is not None:
+                return found
+
+    elif isinstance(value, list):
+        for child in value:
+            found = _find_ppfd_ratio_for_height(
+                child,
+                height_cm,
+                max_depth=max_depth - 1,
+                in_ratio_context=in_ratio_context,
+            )
+            if found is not None:
+                return found
+
+    return None
 
 
 def _find_first_number_by_key(value: Any, keys: tuple[str, ...], *, max_depth: int = 5) -> float | None:
@@ -1035,6 +1131,21 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 return result
         return []
 
+    def _ppfd_ratio_for_height(self, height_cm: int) -> float | None:
+        """Return a PPFD ratio/factor for a height relative to @25 cm, if exposed."""
+        if height_cm == 25:
+            return 1.0
+        data = self.data or {}
+        for root_key in ("math", "kit", "ui", "full", "state"):
+            root = data.get(root_key)
+            result = _find_ppfd_ratio_for_height(root, height_cm)
+            if result is not None:
+                # Accept only plausible relative factors. Values above 5 are almost
+                # certainly raw PPFD or unrelated numeric fields, not ratios.
+                if 0 < result <= 5:
+                    return result
+        return None
+
     def ppfd_cm(self, height_cm: int) -> float | None:
         """Calculate current PPFD at the requested height in µmol/m²/s."""
         channels = self.channels
@@ -1058,11 +1169,13 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if height_cm == 25:
                 return round(native_25, 2)
 
-            # If firmware does not expose separate @35/@45 cm coefficients, keep the
-            # sensors usable with a conservative distance-based estimate. Exact values
-            # still take precedence when /api/math/get or /api/kit exposes them.
-            if height_cm in (35, 45):
-                return round(native_25 * ((25 / height_cm) ** 2), 2)
+            # Do not use inverse-square fallback for @35/@45 cm: it is too low for
+            # this extended aquarium light. Use only controller-provided ratios when
+            # available; otherwise leave the value unknown instead of showing a wrong
+            # estimate.
+            ratio = self._ppfd_ratio_for_height(height_cm)
+            if ratio is not None:
+                return round(native_25 * ratio, 2)
 
         # The spectrum gallery exposes totalPPFD for saved spectra in some firmware builds.
         # Use it as a last fallback for @25cm when the current manual channels exactly
@@ -1087,8 +1200,11 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if native_25 is not None:
             if height_cm == 25:
                 return "calculated: kit.channels.totalPPFD"
+            ratio = self._ppfd_ratio_for_height(height_cm)
+            if ratio is not None:
+                return f"calculated: @25cm totalPPFD × controller ratio for @{height_cm}cm"
             if height_cm in (35, 45):
-                return f"estimated: @25cm totalPPFD scaled to @{height_cm}cm"
+                return f"unavailable: no controller coefficients or ratio for @{height_cm}cm"
         if height_cm == 25 and self.current_spectrum is not None:
             total_ppfd = _safe_float(self.current_spectrum.get("total_ppfd"))
             if total_ppfd is not None:
