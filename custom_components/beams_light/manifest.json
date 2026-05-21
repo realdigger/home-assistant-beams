@@ -1,0 +1,14 @@
+{
+  "domain": "beams_light",
+  "name": "BEAMS Light",
+  "codeowners": [
+    "@realdigger"
+  ],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/realdigger/home-assistant-beams-light",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/realdigger/home-assistant-beams-light/issues",
+  "requirements": [],
+  "version": "0.7.5"
+}

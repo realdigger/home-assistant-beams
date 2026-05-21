@@ -1,0 +1,50 @@
+{
+  "title": "BEAMS Light",
+  "config": {
+    "step": {
+      "user": {
+        "title": "BEAMS Light",
+        "description": "Введите локальный IP-адрес или URL контроллера BEAMS.",
+        "data": {
+          "host": "Хост или URL",
+          "name": "Название"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Не удалось подключиться к контроллеру BEAMS",
+      "unknown": "Неизвестная ошибка"
+    },
+    "abort": {
+      "already_configured": "Этот контроллер BEAMS уже добавлен"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "estimated_power": {
+        "name": "Расчётная мощность"
+      },
+      "timepoint": {
+        "name": "Точка дневного цикла"
+      },
+      "current_cycle_dli": {
+        "name": "DLI текущего цикла"
+      },
+      "ppfd_25cm": {
+        "name": "PPFD @25 см"
+      },
+      "ppfd_35cm": {
+        "name": "PPFD @35 см"
+      },
+      "ppfd_45cm": {
+        "name": "PPFD @45 см"
+      },
+      "kit_name": {
+        "name": "Модель светильника"
+      },
+      "uptime": {
+        "name": "Время работы"
+      }
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "title": "BEAMS Light",
+  "config": {
+    "step": {
+      "user": {
+        "title": "BEAMS Light",
+        "description": "Enter the local IP address or URL of the BEAMS controller.",
+        "data": {
+          "host": "Host or URL",
+          "name": "Name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the BEAMS controller",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This BEAMS controller is already configured"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "estimated_power": {
+        "name": "Estimated power"
+      },
+      "timepoint": {
+        "name": "Cycle timepoint"
+      },
+      "current_cycle_dli": {
+        "name": "Current cycle DLI"
+      },
+      "ppfd_25cm": {
+        "name": "PPFD @25 cm"
+      },
+      "ppfd_35cm": {
+        "name": "PPFD @35 cm"
+      },
+      "ppfd_45cm": {
+        "name": "PPFD @45 cm"
+      },
+      "kit_name": {
+        "name": "Light model"
+      },
+      "uptime": {
+        "name": "Uptime"
+      }
+    }
+  }
+}

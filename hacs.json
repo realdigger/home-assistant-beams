@@ -1,0 +1,12 @@
+{
+  "name": "BEAMS Light",
+  "render_readme": true,
+  "domains": [
+    "light",
+    "number",
+    "select",
+    "sensor"
+  ],
+  "iot_class": "local_polling",
+  "homeassistant": "2025.1.0"
+}

@@ -1,0 +1,54 @@
+set_channels:
+  name: Set channels
+  description: Set BEAMS channels in percent and switch the controller to manual mode.
+  fields:
+    channels:
+      required: true
+      example: [20, 20, 20, 20, 20, 20, 20, 20, 20, 20]
+      selector:
+        object:
+    entry_id:
+      required: false
+      example: "0123456789abcdef0123456789abcdef"
+      selector:
+        text:
+
+set_mode:
+  name: Set mode
+  description: Switch BEAMS controller mode.
+  fields:
+    mode:
+      required: true
+      example: manual
+      selector:
+        select:
+          options:
+            - auto
+            - manual
+    entry_id:
+      required: false
+      selector:
+        text:
+
+apply_spectrum:
+  name: Apply spectrum
+  description: Apply a spectrum from the controller gallery by name, option label, or numeric ID. The controller is switched to manual mode.
+  fields:
+    spectrum:
+      required: true
+      example: "Ice and fire #5"
+      selector:
+        text:
+    entry_id:
+      required: false
+      selector:
+        text:
+
+refresh_spectrums:
+  name: Refresh spectrums
+  description: Reload the spectrum gallery from the BEAMS controller.
+  fields:
+    entry_id:
+      required: false
+      selector:
+        text:
