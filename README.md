@@ -1,6 +1,7 @@
 # BEAMS Light
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz/)
+[![Release](https://img.shields.io/github/v/release/realdigger/home-assistant-beams.svg)](https://github.com/realdigger/home-assistant-beams/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Unofficial Home Assistant custom integration for BEAMS reef aquarium lights.
@@ -33,7 +34,7 @@ Other BEAMS lights may work if they expose the same local controller API.
 1. Open HACS.
 2. Go to **Integrations**.
 3. Add custom repository:
-   - Repository: `https://github.com/realdigger/home-assistant-beams-light`
+   - Repository: `https://github.com/realdigger/home-assistant-beams`
    - Category: `Integration`
 4. Install **BEAMS Light**.
 5. Restart Home Assistant.
@@ -124,7 +125,7 @@ sensor.beams_light_cycle_timepoint
 
 `uptime` is displayed as days, hours, and minutes. `cycle_timepoint` is displayed as hours and minutes.
 
-DLI is calculated from the current daily cycle data exposed by the controller.
+DLI is calculated from the current daily cycle data exposed by the controller. PPFD uses native coefficients when available and falls back to controller kit PPFD data.
 
 ## Services
 

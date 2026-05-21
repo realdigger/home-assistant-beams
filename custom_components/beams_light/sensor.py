@@ -55,7 +55,6 @@ SENSORS: tuple[BeamsSensorEntityDescription, ...] = (
         key="current_cycle_dli",
         translation_key="current_cycle_dli",
         name="Current cycle DLI",
-        native_unit_of_measurement="mol/m²/day",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda coordinator: round(coordinator.current_cycle_dli, 1) if coordinator.current_cycle_dli is not None else None,
     ),
@@ -143,4 +142,10 @@ class BeamsSensor(BeamsEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any] | None:
         if self.entity_description.key == "current_cycle_dli":
             return {"source": self.coordinator.current_cycle_dli_source}
+        if self.entity_description.key.startswith("ppfd_"):
+            try:
+                height_cm = int(self.entity_description.key.split("_")[1].replace("cm", ""))
+            except (IndexError, ValueError):
+                return None
+            return {"source": self.coordinator.ppfd_source_cm(height_cm)}
         return None

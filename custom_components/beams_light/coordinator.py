@@ -1050,14 +1050,49 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 total += channels[index] * coefficient
             return round(total, 2)
 
+        # The native web UI can calculate the current PPFD from /api/kit ->
+        # channels[*].totalPPFD. On known firmware this is the @25 cm PPFD basis
+        # used by the DLI calculation. Use it as the primary fallback for @25 cm.
+        native_25 = self._native_ppfd_25cm(channels)
+        if native_25 is not None:
+            if height_cm == 25:
+                return round(native_25, 2)
+
+            # If firmware does not expose separate @35/@45 cm coefficients, keep the
+            # sensors usable with a conservative distance-based estimate. Exact values
+            # still take precedence when /api/math/get or /api/kit exposes them.
+            if height_cm in (35, 45):
+                return round(native_25 * ((25 / height_cm) ** 2), 2)
+
         # The spectrum gallery exposes totalPPFD for saved spectra in some firmware builds.
-        # Use it as a fallback for @25cm when the current manual channels exactly match a gallery spectrum.
+        # Use it as a last fallback for @25cm when the current manual channels exactly
+        # match a gallery spectrum.
         if height_cm == 25:
             spectrum = self.current_spectrum
             if spectrum is not None:
                 total_ppfd = _safe_float(spectrum.get("total_ppfd"))
                 if total_ppfd is not None:
                     return round(total_ppfd, 2)
+        return None
+
+    def ppfd_source_cm(self, height_cm: int) -> str | None:
+        """Human-readable source used for a PPFD sensor."""
+        channels = self.channels
+        if not channels:
+            return None
+        coefficients = self._ppfd_coefficients_for_height(height_cm)
+        if coefficients:
+            return f"calculated: coefficients for @{height_cm}cm"
+        native_25 = self._native_ppfd_25cm(channels)
+        if native_25 is not None:
+            if height_cm == 25:
+                return "calculated: kit.channels.totalPPFD"
+            if height_cm in (35, 45):
+                return f"estimated: @25cm totalPPFD scaled to @{height_cm}cm"
+        if height_cm == 25 and self.current_spectrum is not None:
+            total_ppfd = _safe_float(self.current_spectrum.get("total_ppfd"))
+            if total_ppfd is not None:
+                return "api: matched spectrum totalPPFD"
         return None
 
     @property

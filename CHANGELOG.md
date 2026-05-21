@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.0
+
+- Fixed PPFD display: `@25 cm` now falls back to `kit.channels[*].totalPPFD`, the same data source used for DLI calculation.
+- Added fallback estimates for `@35 cm` and `@45 cm` when firmware does not expose separate PPFD coefficients for these heights.
+- Added a `source` attribute to PPFD sensors.
+
+## 0.7.9
+
+- Removed the unit of measurement from `sensor.beams_light_current_cycle_dli`: it now displays only the numeric value without `mol/m²/day`.
+
+## 0.7.8
+
+- Added a GitHub release badge to `README.md`.
+- Updated repository links to `https://github.com/realdigger/home-assistant-beams`.
+
 ## 0.7.7
 
 - Current cycle DLI is now rounded to one decimal place.
