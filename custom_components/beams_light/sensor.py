@@ -57,6 +57,16 @@ def _format_cycle_timepoint(seconds: float | None) -> str | None:
     return f"{hours} ч {minutes:02d} мин"
 
 
+def _format_manual_session_remaining(seconds: float | None) -> str | None:
+    """Format the remaining manual-mode session time."""
+    if seconds is None:
+        return None
+    total_minutes = max(int(seconds) // 60, 0)
+    hours = total_minutes // 60
+    minutes = total_minutes % 60
+    return f"{hours} ч {minutes:02d} мин"
+
+
 SENSORS: tuple[BeamsSensorEntityDescription, ...] = (
     BeamsSensorEntityDescription(
         key="current_cycle_dli",
@@ -118,6 +128,14 @@ SENSORS: tuple[BeamsSensorEntityDescription, ...] = (
         translation_key="timepoint",
         name="Cycle timepoint",
         value_fn=lambda coordinator: _format_cycle_timepoint(coordinator.timepoint),
+    ),
+    BeamsSensorEntityDescription(
+        key="manual_mode_remaining",
+        translation_key="manual_mode_remaining",
+        name="До сброса ручного режима",
+        value_fn=lambda coordinator: _format_manual_session_remaining(
+            coordinator.manual_session_remaining_seconds
+        ),
     ),
     BeamsSensorEntityDescription(
         key="light_uniformity",

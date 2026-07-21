@@ -20,21 +20,37 @@ class BeamsChannelCard extends HTMLElement {
       return;
     }
 
+    // Home Assistant publishes state updates independently of a drag operation.
+    // Recreating a native range input while it is being dragged makes its thumb
+    // visibly jump back to the last reported controller value.
+    if (this._isDragging) {
+      return;
+    }
+
     const rows = this.config.entities
       .map((entityId) => this._hass.states[entityId])
       .filter(Boolean)
       .map((state) => {
-        const unavailable = state.state === "unavailable" || state.state === "unknown";
-        const value = unavailable ? 0 : Number(state.state);
+        const hasReportedValue = state.state !== "unavailable" && state.state !== "unknown";
+        const reportedValue = hasReportedValue
+          ? Number(state.state)
+          : Number(state.attributes.current_value);
+        const unavailable = !Number.isFinite(reportedValue);
+        const editable = !state.attributes.service_mode && hasReportedValue;
+        const pendingValue = this._pendingValues?.get(state.entity_id);
+        if (pendingValue && Math.abs(reportedValue - pendingValue) < 0.011) {
+          this._pendingValues.delete(state.entity_id);
+        }
+        const value = pendingValue ?? (unavailable ? 0 : reportedValue);
         const color = state.attributes.color || "var(--primary-color)";
         const name = state.attributes.friendly_name || state.entity_id;
         return `
           <div class="channel ${unavailable ? "unavailable" : ""}">
             <div class="label"><span class="dot" style="background:${color}"></span>${name}</div>
             <div class="control">
-              <input type="range" min="0" max="100" step="0.1" value="${value}" ${unavailable ? "disabled" : ""}
+              <input type="range" min="0" max="100" step="0.01" value="${value}" ${editable ? "" : "disabled"}
                 data-entity-id="${state.entity_id}" style="--channel-color:${color}">
-              <span>${unavailable ? "—" : `${value.toFixed(1)}%`}</span>
+              <span>${unavailable ? "—" : `${value.toFixed(2)}%`}</span>
             </div>
           </div>`;
       })
@@ -60,27 +76,56 @@ class BeamsChannelCard extends HTMLElement {
       </style>`;
 
     this.querySelectorAll("input[type=range]").forEach((slider) => {
+      slider.addEventListener("pointerdown", (event) => {
+        this._isDragging = true;
+        this._pendingValues = this._pendingValues || new Map();
+        this._pendingValues.set(
+          event.target.dataset.entityId,
+          Number(event.target.value),
+        );
+      });
       slider.addEventListener("input", (event) => {
+        this._isDragging = true;
+        this._pendingValues = this._pendingValues || new Map();
+        this._pendingValues.set(
+          event.target.dataset.entityId,
+          Number(event.target.value),
+        );
         const output = event.target.parentElement.querySelector("span");
-        output.textContent = `${Number(event.target.value).toFixed(1)}%`;
+        output.textContent = `${Number(event.target.value).toFixed(2)}%`;
       });
       slider.addEventListener("change", (event) => {
+        const value = Number(event.target.value);
+        this._isDragging = false;
+        this._pendingValues = this._pendingValues || new Map();
+        this._pendingValues.set(event.target.dataset.entityId, value);
+        this._render();
+        setTimeout(() => {
+          if (this._pendingValues?.get(event.target.dataset.entityId) === value) {
+            this._pendingValues.delete(event.target.dataset.entityId);
+            this._render();
+          }
+        }, 5000);
         this._hass.callService("number", "set_value", {
           entity_id: event.target.dataset.entityId,
-          value: Number(event.target.value),
+          value,
         });
       });
     });
   }
 }
 
-customElements.define("beams-channel-card", BeamsChannelCard);
+if (!customElements.get("beams-channel-card")) {
+  customElements.define("beams-channel-card", BeamsChannelCard);
+}
 window.customCards = window.customCards || [];
-window.customCards.push({
-  type: "beams-channel-card",
-  name: "BEAMS Channels",
-  description: "Color-coded BEAMS channel sliders",
-});
+if (!window.customCards.some((card) => card.type === "beams-channel-card")) {
+  window.customCards.push({
+    type: "beams-channel-card",
+    name: "BEAMS Channels",
+    description: "Color-coded BEAMS channel sliders",
+  });
+}
 
 class BeamsSpectrumCard extends HTMLElement {
   setConfig(config) {
@@ -149,9 +194,13 @@ class BeamsSpectrumCard extends HTMLElement {
   }
 }
 
-customElements.define("beams-spectrum-card", BeamsSpectrumCard);
-window.customCards.push({
-  type: "beams-spectrum-card",
-  name: "BEAMS Spectrum",
-  description: "Current BEAMS spectral distribution",
-});
+if (!customElements.get("beams-spectrum-card")) {
+  customElements.define("beams-spectrum-card", BeamsSpectrumCard);
+}
+if (!window.customCards.some((card) => card.type === "beams-spectrum-card")) {
+  window.customCards.push({
+    type: "beams-spectrum-card",
+    name: "BEAMS Spectrum",
+    description: "Current BEAMS spectral distribution",
+  });
+}

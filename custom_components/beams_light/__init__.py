@@ -40,6 +40,7 @@ FRONTEND_DATA_KEY = f"{DOMAIN}_frontend_registered"
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
+    Platform.BUTTON,
     Platform.NUMBER,
     Platform.SELECT,
     Platform.SENSOR,
@@ -91,7 +92,7 @@ def _get_target_coordinator(hass: HomeAssistant, call: ServiceCall) -> BeamsCoor
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate the former controllable light into a read-only binary sensor."""
-    if entry.version > 8:
+    if entry.version > 12:
         return False
     if entry.version < 2:
         entity_registry = er.async_get(hass)
@@ -146,12 +147,46 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             name = names_by_unique_id.get(registry_entry.unique_id)
             if name is not None:
                 entity_registry.async_update_entity(entity_id, original_name=name)
-    hass.config_entries.async_update_entry(entry, version=8, minor_version=entry.minor_version)
+    if entry.version < 9:
+        entity_registry = er.async_get(hass)
+        spectrum_unique_id = f"{entry.entry_id}_spectrum"
+        for entity_id, registry_entry in entity_registry.entities.items():
+            if registry_entry.unique_id == spectrum_unique_id:
+                entity_registry.async_update_entity(entity_id, original_name="Спектр")
+                break
+    if entry.version < 10:
+        entity_registry = er.async_get(hass)
+        brightness_unique_id = f"{entry.entry_id}_brightness"
+        for entity_id, registry_entry in entity_registry.entities.items():
+            if registry_entry.unique_id == brightness_unique_id:
+                entity_registry.async_update_entity(entity_id, original_name="Яркость")
+                break
+    if entry.version < 11:
+        entity_registry = er.async_get(hass)
+        remaining_unique_id = f"{entry.entry_id}_manual_mode_remaining"
+        for entity_id, registry_entry in entity_registry.entities.items():
+            if registry_entry.unique_id == remaining_unique_id:
+                entity_registry.async_update_entity(
+                    entity_id,
+                    original_name="До сброса ручного режима",
+                )
+                break
+    if entry.version < 12:
+        entity_registry = er.async_get(hass)
+        duration_unique_id = f"{entry.entry_id}_manual_duration"
+        for entity_id, registry_entry in entity_registry.entities.items():
+            if registry_entry.unique_id == duration_unique_id:
+                entity_registry.async_update_entity(
+                    entity_id,
+                    original_name="Длительность ручного режима",
+                )
+                break
+    hass.config_entries.async_update_entry(entry, version=12, minor_version=entry.minor_version)
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up BEAMS Light from a config entry."""
+async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
+    """Register Lovelace resources before config entries are initialized."""
     if not hass.data.get(FRONTEND_DATA_KEY):
         await hass.http.async_register_static_paths(
             [
@@ -164,6 +199,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         frontend.add_extra_js_url(hass, FRONTEND_URL)
         hass.data[FRONTEND_DATA_KEY] = True
+    return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up BEAMS Light from a config entry."""
 
     session = async_get_clientsession(hass)
     api = BeamsLightApi(session, entry.data[CONF_HOST])
@@ -175,6 +215,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(str(err)) from err
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+
+    entity_registry = er.async_get(hass)
+    brightness_unique_id = f"{entry.entry_id}_brightness"
+    for entity_id, registry_entry in entity_registry.entities.items():
+        if (
+            registry_entry.unique_id == brightness_unique_id
+            and registry_entry.original_name != "Яркость"
+        ):
+            entity_registry.async_update_entity(entity_id, original_name="Яркость")
+            break
+
+    remaining_unique_id = f"{entry.entry_id}_manual_mode_remaining"
+    for entity_id, registry_entry in entity_registry.entities.items():
+        if (
+            registry_entry.unique_id == remaining_unique_id
+            and registry_entry.original_name != "До сброса ручного режима"
+        ):
+            entity_registry.async_update_entity(
+                entity_id,
+                original_name="До сброса ручного режима",
+            )
+            break
+
+    duration_unique_id = f"{entry.entry_id}_manual_duration"
+    for entity_id, registry_entry in entity_registry.entities.items():
+        if (
+            registry_entry.unique_id == duration_unique_id
+            and registry_entry.original_name != "Длительность ручного режима"
+        ):
+            entity_registry.async_update_entity(
+                entity_id,
+                original_name="Длительность ручного режима",
+            )
+            break
 
     device_info = (coordinator.data or {}).get("device_info") or {}
     device_registry = dr.async_get(hass)

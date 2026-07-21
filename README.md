@@ -13,9 +13,10 @@ This project is not affiliated with, endorsed by, or supported by BeautifulReef 
 ## Features
 
 - Read-only main-light indicator
-- Auto/manual mode switch
+- Auto/manual mode and service-mode switches
 - Overall brightness and 10 spectral channel controls
-- Spectrum selector from the controller gallery
+- Spectrum selector and refresh button for the controller gallery
+- Configurable manual-mode duration from one to six hours and a remaining-time sensor
 - Current daily-cycle DLI sensor
 - Current PPFD sensors for `@25 cm`, `@35 cm`, and `@45 cm`
 - Estimated power, light model, uptime, cycle timepoint, and light-uniformity sensors
@@ -41,7 +42,7 @@ Other BEAMS lights may work if they expose the same local controller API.
    - Repository: `https://github.com/realdigger/home-assistant-beams`
    - Category: `Integration`
 4. Install **BEAMS Light**.
-5. Restart Home Assistant.
+5. Restart Home Assistant, then refresh the browser page once.
 
 ### Manual
 
@@ -58,7 +59,7 @@ Then restart Home Assistant.
 Add the integration from:
 
 ```text
-Settings → Devices & services → Add integration → BEAMS Light
+Settings → Devices & services → Add integration → BEAMS LED Light
 ```
 
 Controller URL examples:
@@ -85,12 +86,14 @@ Reports whether at least one light channel is active. It is an indicator only an
 
 ```text
 switch.<device_id>_manual_mode
+switch.<device_id>_service_mode
 select.<device_id>_spectrum
+select.<device_id>_manual_duration
 ```
 
 Turn on `switch.<device_id>_manual_mode` for manual control. Turn it off for automatic daily-cycle control.
 
-In auto mode, the brightness and individual channel controls are unavailable. The spectrum selector displays `Авто: дневной цикл`; the controller interpolates between daily-cycle points, so it does not have a single fixed spectrum name.
+In auto mode, the controls display the current levels but reject changes. The spectrum selector displays `Авто: дневной цикл`; the controller interpolates between daily-cycle points, so it does not have a single fixed spectrum name. Service mode sets every channel to 20%; switching it off returns the controller to auto mode.
 
 The spectrum selector applies saved spectra from the controller gallery.
 
@@ -103,7 +106,7 @@ number.<device_id>_ch1_<led_type>
 number.<device_id>_ch10_<led_type>
 ```
 
-Values are shown as `0–100%` in Home Assistant. Changing the overall brightness preserves the relative channel levels. Changing a value switches the controller to manual mode.
+Values are shown as `0–100%` in Home Assistant. Changing the overall brightness preserves the relative channel levels. To change values, enable manual mode first.
 
 Entity IDs include the configured device ID and the LED type returned by the controller. Use the entity IDs created for your device in Home Assistant.
 
@@ -127,6 +130,7 @@ sensor.<device_id>_kernel
 sensor.<device_id>_lcs
 sensor.<device_id>_operating_system
 sensor.<device_id>_user_interface
+sensor.<device_id>_manual_mode_remaining
 ```
 
 `uptime` is displayed as days, hours, and minutes. `cycle_timepoint` is displayed as hours and minutes.
@@ -137,7 +141,7 @@ The device page includes the model ID and number of assemblies. The controller I
 
 ## Lovelace cards
 
-The integration automatically registers two custom cards; no additional frontend resource is needed.
+The integration automatically registers two custom cards. After installing or updating the integration, refresh the Home Assistant browser page once so the frontend loads the card module.
 
 ### Colour-coded channels
 
@@ -150,7 +154,7 @@ entities:
   # Add the remaining channel entities here.
 ```
 
-The sliders use the colour reported by the controller and become inactive in auto mode.
+The sliders use the colour reported by the controller. In auto mode they show current values, but changes are rejected by the integration.
 
 ### Current spectrum
 

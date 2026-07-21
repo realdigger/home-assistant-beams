@@ -1,9 +1,9 @@
 {
-  "title": "BEAMS Light",
+  "title": "BEAMS LED Light",
   "config": {
     "step": {
       "user": {
-        "title": "BEAMS Light",
+        "title": "BEAMS LED Light",
         "description": "Введите локальный IP-адрес, hostname или полный URL контроллера BEAMS. Примеры: 192.168.1.55, beams2.sensors.local или http://beams2.sensors.local.",
         "data": {
           "host": "IP-адрес, hostname или URL",
@@ -11,7 +11,7 @@
         }
       },
       "reconfigure": {
-        "title": "Перенастройка BEAMS Light",
+        "title": "Перенастройка BEAMS LED Light",
         "description": "Введите локальный IP-адрес, hostname или полный URL контроллера BEAMS.",
         "data": {
           "host": "IP-адрес, hostname или URL",
@@ -25,7 +25,7 @@
     },
     "abort": {
       "already_configured": "Этот контроллер BEAMS уже добавлен",
-      "reconfigure_successful": "BEAMS Light успешно перенастроен",
+      "reconfigure_successful": "BEAMS LED Light успешно перенастроен",
       "wrong_device": "Контроллер не соответствует этой записи конфигурации"
     }
   },
@@ -45,6 +45,9 @@
       },
       "timepoint": {
         "name": "Точка дневного цикла"
+      },
+      "manual_mode_remaining": {
+        "name": "До сброса ручного режима"
       },
       "current_cycle_dli": {
         "name": "DLI текущего цикла"
@@ -97,12 +100,25 @@
         "name": "Яркость"
       }
     },
+    "button": {
+      "refresh_spectrums": {
+        "name": "Обновить спектры"
+      }
+    },
     "switch": {
       "service_mode": {
         "name": "Сервисный режим"
       },
       "manual_mode": {
         "name": "Ручной режим"
+      }
+    },
+    "select": {
+      "spectrum": {
+        "name": "Спектр"
+      },
+      "manual_duration": {
+        "name": "Длительность ручного режима"
       }
     }
   }

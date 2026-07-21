@@ -1,3 +1,11 @@
+## 0.9.0
+
+- Renamed the integration to **BEAMS LED Light**.
+- Added service mode, configurable manual-mode duration, the remaining-time sensor, and a spectrum-gallery refresh button.
+- Added device diagnostics, spectrum graph, colour-coded channel card, and controller spectrum data refresh.
+- Added controller URL, hostname, and IP address support during setup.
+- Brightness and channel values are now visible in auto mode; changes are rejected until manual mode is enabled.
+
 ## 0.8.3
 
 - PPFD sensors now display whole-number values without decimal places.

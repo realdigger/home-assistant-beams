@@ -18,13 +18,19 @@ from .const import (
     CHANNEL_NAMES,
     CONF_LAST_MODE,
     CONF_LAST_SPECTRUM,
+    CONF_MANUAL_DURATION_HOURS,
     CONF_MANUAL_CHANNELS,
+    CONF_MANUAL_SESSION_DEADLINE,
+    CONF_MANUAL_SESSION_RENEWED_AT,
+    CONF_MANUAL_SPECTRUM_MODE,
     DEFAULT_CHANNEL_COUNT,
     DEFAULT_MANUAL_VALUE,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     MODE_AUTO,
     MODE_MANUAL,
+    SPECTRUM_OPTION_MANUAL,
+    SPECTRUM_OPTION_SERVICE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,6 +39,8 @@ SPECTRUM_MATCH_TOLERANCE = 0.0006
 SECONDS_PER_DAY = 86_400
 MANUAL_MODE_SETTLE_DELAY = 0.2
 MANUAL_MODE_CONFIRM_ATTEMPTS = 10
+MANUAL_MODE_RENEWAL_INTERVAL = 50 * 60
+DEFAULT_MANUAL_DURATION_HOURS = 1
 
 # Same assembly-count map as used by the native controller UI when applying
 # aquarium setup corrections to PPFD/DLI calculations.
@@ -782,6 +790,10 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else:
                 data["manual"] = self.entry.options.get(CONF_LAST_MODE) == MODE_MANUAL
 
+        await self._async_update_manual_session(data)
+        if not as_bool(data.get("manual")):
+            self.set_manual_spectrum_mode(None)
+
         channel_count = self._detect_channel_count(data)
         channels = data.get("channels") or []
         if not channels:
@@ -936,6 +948,9 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     @property
     def current_spectrum_option(self) -> str | None:
+        manual_spectrum_mode = self.manual_spectrum_mode
+        if manual_spectrum_mode is not None:
+            return manual_spectrum_mode
         matched = self.find_matching_spectrum(self.channels)
         if matched:
             return str(matched["option"])
@@ -1434,6 +1449,93 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def get_default_manual_channels(self) -> list[float]:
         return [DEFAULT_MANUAL_VALUE] * self.channel_count
 
+    @property
+    def manual_duration_hours(self) -> int:
+        value = _safe_int(self.entry.options.get(CONF_MANUAL_DURATION_HOURS))
+        if value is None or value not in range(1, 7):
+            return DEFAULT_MANUAL_DURATION_HOURS
+        return value
+
+    @property
+    def manual_spectrum_mode(self) -> str | None:
+        if not self.is_manual:
+            return None
+        mode = self.entry.options.get(CONF_MANUAL_SPECTRUM_MODE)
+        if mode == "manual":
+            return SPECTRUM_OPTION_MANUAL
+        if mode == "service":
+            return SPECTRUM_OPTION_SERVICE
+        return None
+
+    @property
+    def is_service_mode(self) -> bool:
+        return self.manual_spectrum_mode == SPECTRUM_OPTION_SERVICE
+
+    def set_manual_spectrum_mode(self, mode: str | None) -> None:
+        options = dict(self.entry.options)
+        if mode is None:
+            if CONF_MANUAL_SPECTRUM_MODE not in options:
+                return
+            options.pop(CONF_MANUAL_SPECTRUM_MODE)
+        else:
+            options[CONF_MANUAL_SPECTRUM_MODE] = mode
+        self.hass.config_entries.async_update_entry(self.entry, options=options)
+
+    @property
+    def manual_session_remaining_seconds(self) -> float | None:
+        if not self.is_manual:
+            return None
+        deadline = _safe_float(self.entry.options.get(CONF_MANUAL_SESSION_DEADLINE))
+        if deadline is None:
+            return None
+        return max(deadline - datetime.now(timezone.utc).timestamp(), 0.0)
+
+    def _start_manual_session(self) -> None:
+        now = datetime.now(timezone.utc).timestamp()
+        options = dict(self.entry.options)
+        options[CONF_MANUAL_SESSION_DEADLINE] = now + self.manual_duration_hours * 3600
+        options[CONF_MANUAL_SESSION_RENEWED_AT] = now
+        self.hass.config_entries.async_update_entry(self.entry, options=options)
+
+    def _clear_manual_session(self) -> None:
+        options = dict(self.entry.options)
+        options.pop(CONF_MANUAL_SESSION_DEADLINE, None)
+        options.pop(CONF_MANUAL_SESSION_RENEWED_AT, None)
+        self.hass.config_entries.async_update_entry(self.entry, options=options)
+
+    async def async_set_manual_duration(self, hours: int) -> None:
+        if hours not in range(1, 7):
+            raise HomeAssistantError("Manual mode duration must be between 1 and 6 hours")
+        options = dict(self.entry.options)
+        options[CONF_MANUAL_DURATION_HOURS] = hours
+        self.hass.config_entries.async_update_entry(self.entry, options=options)
+        if self.is_manual:
+            self._start_manual_session()
+        await self.async_request_refresh()
+
+    async def _async_update_manual_session(self, data: dict[str, Any]) -> None:
+        deadline = _safe_float(self.entry.options.get(CONF_MANUAL_SESSION_DEADLINE))
+        if deadline is None:
+            return
+        if not as_bool(data.get("manual")):
+            self._clear_manual_session()
+            return
+
+        now = datetime.now(timezone.utc).timestamp()
+        if now >= deadline:
+            self._manual_override = False
+            await self.api.async_set_manual(False)
+            self._clear_manual_session()
+            data["manual"] = False
+            return
+
+        renewed_at = _safe_float(self.entry.options.get(CONF_MANUAL_SESSION_RENEWED_AT))
+        if renewed_at is None or now - renewed_at >= MANUAL_MODE_RENEWAL_INTERVAL:
+            await self.api.async_set_manual(True)
+            options = dict(self.entry.options)
+            options[CONF_MANUAL_SESSION_RENEWED_AT] = now
+            self.hass.config_entries.async_update_entry(self.entry, options=options)
+
     def get_saved_manual_channels(self) -> list[float]:
         saved = self.entry.options.get(CONF_MANUAL_CHANNELS)
         if isinstance(saved, list) and saved:
@@ -1516,6 +1618,7 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         option = str(spectrum.get("option") or spectrum.get("name") or selector)
         self._last_spectrum_option = option
         self.save_last_spectrum(option)
+        self.set_manual_spectrum_mode(None)
         await self.async_set_channels(channels, ensure_manual=True, force_manual=True)
 
     async def async_set_mode(self, mode: str) -> None:
@@ -1531,12 +1634,16 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self.api.async_set_channels(channels)
             await self.api.async_set_manual(True)
             self.save_manual_channels(channels)
+            self.set_manual_spectrum_mode("manual")
+            self._start_manual_session()
         elif mode == MODE_AUTO:
             if self.is_manual and any(value > 0.0001 for value in self.channels):
                 self.save_manual_channels(self.channels)
             self._manual_override = False
             await self.api.async_set_manual(False)
             self.save_last_mode(MODE_AUTO)
+            self._clear_manual_session()
+            self.set_manual_spectrum_mode(None)
         else:
             raise HomeAssistantError(f"Unsupported BEAMS mode: {mode}")
         await self.async_request_refresh()
@@ -1549,6 +1656,7 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         force_manual: bool = False,
     ) -> None:
         channels = [clamp_channel(value) for value in channels]
+        was_manual = self.is_manual
         if ensure_manual:
             self._manual_override = True
             if force_manual:
@@ -1574,6 +1682,8 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         else:
             await self.api.async_set_channels(channels)
         self.save_manual_channels(channels)
+        if ensure_manual and not was_manual:
+            self._start_manual_session()
         await self.async_request_refresh()
 
     async def async_turn_off(self) -> None:
@@ -1594,6 +1704,8 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ensure_manual=True,
             force_manual=True,
         )
+        self.set_manual_spectrum_mode("service")
+        self.async_set_updated_data({**(self.data or {})})
 
     async def async_turn_on(self, brightness: int | None = None) -> None:
         channels = self.get_saved_manual_channels()

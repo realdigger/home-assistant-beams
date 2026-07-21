@@ -1,14 +1,29 @@
-title: BEAMS Channels
+title: BEAMS
+resources:
+  - url: /beams_light_static/beams-channel-card.js
+    type: module
 views:
-  - title: Channels
-    path: channels
+  - title: Светильник
+    path: light
     cards:
+      - type: entities
+        title: Управление
+        show_header_toggle: false
+        entities:
+          - entity: binary_sensor.beams_2_pro_r_8_001_light
+          - entity: switch.beams_2_pro_r_8_001_manual_mode
+          - entity: switch.beams_2_pro_r_8_001_service_mode
+          - entity: select.beams_2_pro_r_8_001_spectrum
+          - entity: select.beams_2_pro_r_8_001_ruchnoi_rezhim_na
+          - entity: sensor.beams_2_pro_r_8_001_until_auto_mode
+          - entity: button.beams_2_pro_r_8_001_obnovit_spektry
       - type: custom:beams-spectrum-card
         title: Текущий спектр
         entity: binary_sensor.beams_2_pro_r_8_001_light
       - type: custom:beams-channel-card
-        title: BEAMS Channels
+        title: Каналы
         entities:
+          - number.beams_2_pro_r_8_001_brightness
           - number.beams_2_pro_r_8_001_ch1_v_412
           - number.beams_2_pro_r_8_001_ch2_v_425
           - number.beams_2_pro_r_8_001_ch3_rb_440

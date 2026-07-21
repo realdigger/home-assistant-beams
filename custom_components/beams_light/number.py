@@ -30,11 +30,11 @@ async def async_setup_entry(
 class BeamsBrightnessNumber(BeamsEntity, NumberEntity):
     """Overall brightness control that preserves the current channel ratios."""
 
-    _attr_name = "Brightness"
+    _attr_name = "Яркость"
     _attr_translation_key = "brightness"
     _attr_native_min_value = 0.0
     _attr_native_max_value = 100.0
-    _attr_native_step = 0.1
+    _attr_native_step = 0.01
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_mode = NumberMode.SLIDER
 
@@ -48,13 +48,27 @@ class BeamsBrightnessNumber(BeamsEntity, NumberEntity):
 
     @property
     def available(self) -> bool:
-        return super().available and self.coordinator.mode == MODE_MANUAL
+        """Keep the current value visible while controls are locked."""
+        return super().available
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {"mode": self.coordinator.mode}
+        return {
+            "mode": self.coordinator.mode,
+            "editable": self.coordinator.mode == MODE_MANUAL
+            and not self.coordinator.is_service_mode,
+            "service_mode": self.coordinator.is_service_mode,
+            "current_value": self.native_value,
+        }
 
     async def async_set_native_value(self, value: float) -> None:
+        if (
+            self.coordinator.mode != MODE_MANUAL
+            or self.coordinator.is_service_mode
+        ):
+            raise HomeAssistantError(
+                "Switch BEAMS mode to manual before changing brightness"
+            )
         channels = self.coordinator.channels
         current_max = max(channels or [0.0])
         if current_max <= 0.0001:
@@ -74,7 +88,7 @@ class BeamsChannelNumber(BeamsEntity, NumberEntity):
 
     _attr_native_min_value = 0.0
     _attr_native_max_value = 100.0
-    _attr_native_step = 0.1
+    _attr_native_step = 0.01
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_mode = NumberMode.SLIDER
 
@@ -93,14 +107,18 @@ class BeamsChannelNumber(BeamsEntity, NumberEntity):
 
     @property
     def available(self) -> bool:
-        return super().available and self.coordinator.mode == MODE_MANUAL
+        """Keep the current value visible while controls are locked."""
+        return super().available
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         attributes: dict[str, Any] = {
             "channel": self.index + 1,
-            "editable": self.coordinator.mode == MODE_MANUAL,
+            "editable": self.coordinator.mode == MODE_MANUAL
+            and not self.coordinator.is_service_mode,
             "mode": self.coordinator.mode,
+            "service_mode": self.coordinator.is_service_mode,
+            "current_value": self.native_value,
         }
         color = self.coordinator.channel_color(self.index)
         if color is not None:
@@ -108,8 +126,13 @@ class BeamsChannelNumber(BeamsEntity, NumberEntity):
         return attributes
 
     async def async_set_native_value(self, value: float) -> None:
-        if self.coordinator.mode != MODE_MANUAL:
-            raise HomeAssistantError("Switch BEAMS mode to manual before changing channels")
+        if (
+            self.coordinator.mode != MODE_MANUAL
+            or self.coordinator.is_service_mode
+        ):
+            raise HomeAssistantError(
+                "Switch BEAMS mode to manual before changing channels"
+            )
         channels = self.coordinator.channels
         if not channels:
             channels = self.coordinator.get_default_manual_channels()

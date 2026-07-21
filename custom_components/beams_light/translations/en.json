@@ -1,9 +1,9 @@
 {
-  "title": "BEAMS Light",
+  "title": "BEAMS LED Light",
   "config": {
     "step": {
       "user": {
-        "title": "BEAMS Light",
+        "title": "BEAMS LED Light",
         "description": "Enter the local IP address, hostname, or full URL of the BEAMS controller. Examples: 192.168.1.55, beams2.sensors.local, or http://beams2.sensors.local.",
         "data": {
           "host": "IP address, hostname, or URL",
@@ -11,7 +11,7 @@
         }
       },
       "reconfigure": {
-        "title": "Reconfigure BEAMS Light",
+        "title": "Reconfigure BEAMS LED Light",
         "description": "Enter the local IP address, hostname, or full URL of the BEAMS controller.",
         "data": {
           "host": "IP address, hostname, or URL",
@@ -25,7 +25,7 @@
     },
     "abort": {
       "already_configured": "This BEAMS controller is already configured",
-      "reconfigure_successful": "BEAMS Light was reconfigured successfully",
+      "reconfigure_successful": "BEAMS LED Light was reconfigured successfully",
       "wrong_device": "The controller does not match this configuration entry"
     }
   },
@@ -45,6 +45,9 @@
       },
       "timepoint": {
         "name": "Cycle timepoint"
+      },
+      "manual_mode_remaining": {
+        "name": "Until manual mode reset"
       },
       "current_cycle_dli": {
         "name": "Current cycle DLI"
@@ -97,12 +100,25 @@
         "name": "Brightness"
       }
     },
+    "button": {
+      "refresh_spectrums": {
+        "name": "Refresh spectrums"
+      }
+    },
     "switch": {
       "service_mode": {
         "name": "Service mode"
       },
       "manual_mode": {
         "name": "Manual mode"
+      }
+    },
+    "select": {
+      "spectrum": {
+        "name": "Spectrum"
+      },
+      "manual_duration": {
+        "name": "Manual mode duration"
       }
     }
   }

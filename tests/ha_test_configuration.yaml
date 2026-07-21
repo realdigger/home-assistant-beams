@@ -1,6 +1,15 @@
 # Loads default set of integrations. Do not remove.
 default_config:
 
+homeassistant:
+  auth_providers:
+    - type: trusted_networks
+      trusted_networks:
+        - 127.0.0.1
+        - 172.17.0.1
+      allow_bypass_login: true
+    - type: homeassistant
+
 # Load frontend themes from the themes folder
 frontend:
   themes: !include_dir_merge_named themes
@@ -10,6 +19,10 @@ script: !include scripts.yaml
 scene: !include scenes.yaml
 
 lovelace:
+  resource_mode: yaml
+  resources:
+    - url: /beams_light_static/beams-channel-card.js
+      type: module
   dashboards:
     beams-channels:
       mode: yaml

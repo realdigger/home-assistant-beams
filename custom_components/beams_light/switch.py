@@ -56,9 +56,7 @@ class BeamsServiceModeSwitch(BeamsEntity, SwitchEntity):
 
     @property
     def is_on(self) -> bool:
-        return self.coordinator.is_manual and all(
-            abs(channel - 0.2) < 0.0001 for channel in self.coordinator.channels
-        )
+        return self.coordinator.is_service_mode
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         await self.coordinator.async_activate_service_mode()

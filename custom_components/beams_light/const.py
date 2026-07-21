@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 DOMAIN = "beams_light"
-DEFAULT_NAME = "BEAMS Light"
+DEFAULT_NAME = "BEAMS LED Light"
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=3)
 DEFAULT_TIMEOUT = 10
 
@@ -12,9 +12,16 @@ CONF_MANUAL_CHANNELS = "manual_channels"
 CONF_BASE_URL = "base_url"
 CONF_LAST_MODE = "last_mode"
 CONF_LAST_SPECTRUM = "last_spectrum"
+CONF_MANUAL_DURATION_HOURS = "manual_duration_hours"
+CONF_MANUAL_SESSION_DEADLINE = "manual_session_deadline"
+CONF_MANUAL_SESSION_RENEWED_AT = "manual_session_renewed_at"
+CONF_MANUAL_SPECTRUM_MODE = "manual_spectrum_mode"
 
 MODE_AUTO = "auto"
 MODE_MANUAL = "manual"
+
+SPECTRUM_OPTION_MANUAL = "Ручной"
+SPECTRUM_OPTION_SERVICE = "Сервисный"
 
 DEFAULT_CHANNEL_COUNT = 10
 DEFAULT_MANUAL_VALUE = 0.20
