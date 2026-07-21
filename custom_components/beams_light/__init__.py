@@ -2,15 +2,20 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import voluptuous as vol
 
+from homeassistant.components import frontend
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 from .api import BeamsApiError, BeamsLightApi
 from .const import (
@@ -30,7 +35,16 @@ from .coordinator import BeamsCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.LIGHT, Platform.NUMBER, Platform.SELECT, Platform.SENSOR]
+FRONTEND_URL = "/beams_light_static/beams-channel-card.js"
+FRONTEND_DATA_KEY = f"{DOMAIN}_frontend_registered"
+
+PLATFORMS: list[Platform] = [
+    Platform.BINARY_SENSOR,
+    Platform.NUMBER,
+    Platform.SELECT,
+    Platform.SENSOR,
+    Platform.SWITCH,
+]
 
 SERVICE_SET_CHANNELS_SCHEMA = vol.Schema(
     {
@@ -75,8 +89,54 @@ def _get_target_coordinator(hass: HomeAssistant, call: ServiceCall) -> BeamsCoor
     raise HomeAssistantError("Multiple BEAMS controllers are loaded; provide entry_id")
 
 
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate the former controllable light into a read-only binary sensor."""
+    if entry.version > 5:
+        return False
+    if entry.version < 2:
+        entity_registry = er.async_get(hass)
+        old_entity_id = entity_registry.async_get_entity_id(
+            Platform.LIGHT,
+            DOMAIN,
+            f"{entry.entry_id}_light",
+        )
+        if old_entity_id is not None:
+            entity_registry.async_remove(old_entity_id)
+    if entry.version < 3:
+        entity_registry = er.async_get(hass)
+        old_entity_id = entity_registry.async_get_entity_id(
+            Platform.SELECT,
+            DOMAIN,
+            f"{entry.entry_id}_mode",
+        )
+        if old_entity_id is not None:
+            entity_registry.async_remove(old_entity_id)
+    if entry.version < 5:
+        entity_registry = er.async_get(hass)
+        old_unique_id = f"{entry.entry_id}_software_scripts"
+        for entity_id, registry_entry in entity_registry.entities.items():
+            if registry_entry.unique_id == old_unique_id:
+                entity_registry.async_remove(entity_id)
+                break
+    hass.config_entries.async_update_entry(entry, version=5, minor_version=entry.minor_version)
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up BEAMS Light from a config entry."""
+    if not hass.data.get(FRONTEND_DATA_KEY):
+        await hass.http.async_register_static_paths(
+            [
+                StaticPathConfig(
+                    "/beams_light_static",
+                    str(Path(__file__).parent / "frontend"),
+                    cache_headers=False,
+                )
+            ]
+        )
+        frontend.add_extra_js_url(hass, FRONTEND_URL)
+        hass.data[FRONTEND_DATA_KEY] = True
+
     session = async_get_clientsession(hass)
     api = BeamsLightApi(session, entry.data[CONF_HOST])
     coordinator = BeamsCoordinator(hass, entry, api)
@@ -87,12 +147,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady(str(err)) from err
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+
+    device_info = (coordinator.data or {}).get("device_info") or {}
+    device_registry = dr.async_get(hass)
+    device = device_registry.async_get_device(
+        identifiers={(DOMAIN, str(device_info.get("ident") or entry.entry_id))}
+    )
+    if device is not None:
+        device_registry.async_update_device(
+            device.id,
+            model_id=device_info.get("model_id"),
+            serial_number=device_info.get("serial_number"),
+            sw_version=device_info.get("sw_version"),
+            hw_version=device_info.get("hw_version"),
+        )
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     async def async_handle_set_channels(call: ServiceCall) -> None:
-        channels_percent = [float(value) for value in call.data[ATTR_CHANNELS]]
-        channels = [min(max(value / 100.0, 0.0), 1.0) for value in channels_percent]
         target = _get_target_coordinator(hass, call)
+        channels_percent = [float(value) for value in call.data[ATTR_CHANNELS]]
+        if len(channels_percent) != target.channel_count:
+            raise HomeAssistantError(
+                f"Expected {target.channel_count} channel values, got {len(channels_percent)}"
+            )
+        channels = [min(max(value / 100.0, 0.0), 1.0) for value in channels_percent]
         await target.async_set_channels(channels, ensure_manual=True)
 
     async def async_handle_set_mode(call: ServiceCall) -> None:
@@ -149,6 +228,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         if not hass.data[DOMAIN]:
             hass.data.pop(DOMAIN)
+            frontend.remove_extra_js_url(hass, FRONTEND_URL)
+            hass.data.pop(FRONTEND_DATA_KEY, None)
             hass.services.async_remove(DOMAIN, SERVICE_SET_CHANNELS)
             hass.services.async_remove(DOMAIN, SERVICE_SET_MODE)
             hass.services.async_remove(DOMAIN, SERVICE_APPLY_SPECTRUM)

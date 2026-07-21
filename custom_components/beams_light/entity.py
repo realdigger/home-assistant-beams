@@ -32,4 +32,6 @@ class BeamsEntity(CoordinatorEntity[BeamsCoordinator]):
             device_info["sw_version"] = info["sw_version"]
         if info.get("hw_version"):
             device_info["hw_version"] = info["hw_version"]
+        if info.get("model_id"):
+            device_info["model_id"] = info["model_id"]
         return device_info

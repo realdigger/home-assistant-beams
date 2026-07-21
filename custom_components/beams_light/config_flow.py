@@ -35,20 +35,16 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
     kit = await api.async_get_kit()
     channels = await api.async_get_channels()
 
-    title = data.get(CONF_NAME) or DEFAULT_NAME
+    configured_name = str(data.get(CONF_NAME) or "").strip()
+    title = configured_name or DEFAULT_NAME
     unique_source = base_url
 
-    try:
-        network = await api.async_get_network()
-        ap = network.get("AP") if isinstance(network.get("AP"), dict) else {}
-        title = ap.get("ssid") or title
-    except BeamsApiError:
-        pass
 
     try:
         info = await api.async_info()
         general = info.get("general") if isinstance(info.get("general"), dict) else {}
-        title = general.get("hostName") or title
+        if not configured_name or configured_name == DEFAULT_NAME:
+            title = general.get("hostName") or title
         unique_source = general.get("deviceId") or title or base_url
     except BeamsApiError:
         pass
@@ -67,7 +63,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 class BeamsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for BEAMS Light."""
 
-    VERSION = 1
+    VERSION = 5
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}
@@ -92,5 +88,42 @@ class BeamsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=STEP_USER_DATA_SCHEMA,
+            errors=errors,
+        )
+
+    async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Allow updating the controller URL without removing the integration."""
+        entry = self._get_reconfigure_entry()
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                info = await validate_input(self.hass, user_input)
+                await self.async_set_unique_id(info["unique_id"], raise_on_progress=False)
+                self._abort_if_unique_id_mismatch()
+            except BeamsApiError:
+                _LOGGER.exception("Cannot connect to BEAMS Light controller")
+                errors["base"] = "cannot_connect"
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("Unexpected exception while reconfiguring BEAMS Light")
+                errors["base"] = "unknown"
+            else:
+                return self.async_update_reload_and_abort(
+                    entry,
+                    title=info["title"],
+                    data_updates={
+                        CONF_HOST: info["base_url"],
+                        CONF_NAME: user_input.get(CONF_NAME) or info["title"],
+                    },
+                )
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_HOST, default=entry.data[CONF_HOST]): str,
+                    vol.Optional(CONF_NAME, default=entry.data.get(CONF_NAME, entry.title)): str,
+                }
+            ),
             errors=errors,
         )

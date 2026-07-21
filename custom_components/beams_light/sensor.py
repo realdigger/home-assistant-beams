@@ -119,6 +119,42 @@ SENSORS: tuple[BeamsSensorEntityDescription, ...] = (
         name="Cycle timepoint",
         value_fn=lambda coordinator: _format_cycle_timepoint(coordinator.timepoint),
     ),
+    BeamsSensorEntityDescription(
+        key="light_uniformity",
+        translation_key="light_uniformity",
+        name="Light uniformity",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda coordinator: coordinator.light_uniformity,
+    ),
+    BeamsSensorEntityDescription(
+        key="assembly_count",
+        translation_key="assembly_count",
+        name="Assembly count",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda coordinator: coordinator.assembly_count,
+    ),
+    BeamsSensorEntityDescription(
+        key="controller_id",
+        translation_key="controller_id",
+        name="Controller ID",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda coordinator: coordinator.controller_id,
+    ),
+    *(
+        BeamsSensorEntityDescription(
+            key=f"software_{component}",
+            translation_key=f"software_{component}",
+            name=name,
+            entity_category=EntityCategory.DIAGNOSTIC,
+            value_fn=lambda coordinator, component=component: coordinator.software_version(component),
+        )
+        for component, name in (
+            ("kernel", "Kernel version"),
+            ("lcs", "LCS version"),
+            ("os", "OS version"),
+            ("ui", "TrueSpectrum version"),
+        )
+    ),
 )
 
 
@@ -155,4 +191,10 @@ class BeamsSensor(BeamsEntity, SensorEntity):
             except (IndexError, ValueError):
                 return None
             return {"source": self.coordinator.ppfd_source_cm(height_cm)}
+        if self.entity_description.key == "light_uniformity":
+            return {"source": "calculated: native UI @25cm geometry model"}
+        if self.entity_description.key.startswith("software_"):
+            component = self.entity_description.key.removeprefix("software_")
+            hash_value = self.coordinator.software_hash(component)
+            return {"hash": hash_value} if hash_value is not None else None
         return None

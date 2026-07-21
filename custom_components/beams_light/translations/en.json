@@ -9,6 +9,14 @@
           "host": "Host or URL",
           "name": "Name"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigure BEAMS Light",
+        "description": "Update the local address of the BEAMS controller.",
+        "data": {
+          "host": "Host or URL",
+          "name": "Name"
+        }
       }
     },
     "error": {
@@ -16,10 +24,21 @@
       "unknown": "Unexpected error"
     },
     "abort": {
-      "already_configured": "This BEAMS controller is already configured"
+      "already_configured": "This BEAMS controller is already configured",
+      "reconfigure_successful": "BEAMS Light was reconfigured successfully",
+      "wrong_device": "The controller does not match this configuration entry"
     }
   },
   "entity": {
+    "binary_sensor": {
+      "light_status": {
+        "name": "Light",
+        "state": {
+          "off": "Light is off",
+          "on": "Light is on"
+        }
+      }
+    },
     "sensor": {
       "estimated_power": {
         "name": "Estimated power"
@@ -44,6 +63,43 @@
       },
       "uptime": {
         "name": "Uptime"
+      },
+      "light_uniformity": {
+        "name": "Light uniformity",
+        "state": {
+          "excellent": "Excellent",
+          "good": "Good",
+          "acceptable": "Acceptable",
+          "unacceptable": "Low"
+        }
+      },
+      "assembly_count": {
+        "name": "Assembly count"
+      },
+      "controller_id": {
+        "name": "Controller ID"
+      },
+      "software_kernel": {
+        "name": "Kernel version"
+      },
+      "software_lcs": {
+        "name": "LCS version"
+      },
+      "software_os": {
+        "name": "OS version"
+      },
+      "software_ui": {
+        "name": "TrueSpectrum version"
+      }
+    },
+    "number": {
+      "brightness": {
+        "name": "Brightness"
+      }
+    },
+    "switch": {
+      "manual_mode": {
+        "name": "Manual mode"
       }
     }
   }

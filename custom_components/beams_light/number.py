@@ -22,8 +22,51 @@ async def async_setup_entry(
 ) -> None:
     coordinator: BeamsCoordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
-        [BeamsChannelNumber(coordinator, index) for index in range(coordinator.channel_count)]
+        [BeamsBrightnessNumber(coordinator)]
+        + [BeamsChannelNumber(coordinator, index) for index in range(coordinator.channel_count)]
     )
+
+
+class BeamsBrightnessNumber(BeamsEntity, NumberEntity):
+    """Overall brightness control that preserves the current channel ratios."""
+
+    _attr_name = "Brightness"
+    _attr_translation_key = "brightness"
+    _attr_native_min_value = 0.0
+    _attr_native_max_value = 100.0
+    _attr_native_step = 0.1
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_mode = NumberMode.SLIDER
+
+    def __init__(self, coordinator: BeamsCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.entry.entry_id}_brightness"
+
+    @property
+    def native_value(self) -> float:
+        return round(max(self.coordinator.channels or [0.0]) * 100.0, 2)
+
+    @property
+    def available(self) -> bool:
+        return super().available and self.coordinator.mode == MODE_MANUAL
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"mode": self.coordinator.mode}
+
+    async def async_set_native_value(self, value: float) -> None:
+        channels = self.coordinator.channels
+        current_max = max(channels or [0.0])
+        if current_max <= 0.0001:
+            channels = self.coordinator.get_saved_manual_channels()
+            current_max = max(channels or [0.0])
+        if current_max <= 0.0001:
+            channels = self.coordinator.get_default_manual_channels()
+            current_max = max(channels)
+
+        target = min(max(float(value) / 100.0, 0.0), 1.0)
+        channels = [min(max(channel * target / current_max, 0.0), 1.0) for channel in channels]
+        await self.coordinator.async_set_channels(channels, ensure_manual=True)
 
 
 class BeamsChannelNumber(BeamsEntity, NumberEntity):
@@ -49,12 +92,20 @@ class BeamsChannelNumber(BeamsEntity, NumberEntity):
         return round(channels[self.index] * 100.0, 2)
 
     @property
+    def available(self) -> bool:
+        return super().available and self.coordinator.mode == MODE_MANUAL
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {
+        attributes: dict[str, Any] = {
             "channel": self.index + 1,
             "editable": self.coordinator.mode == MODE_MANUAL,
             "mode": self.coordinator.mode,
         }
+        color = self.coordinator.channel_color(self.index)
+        if color is not None:
+            attributes["color"] = color
+        return attributes
 
     async def async_set_native_value(self, value: float) -> None:
         if self.coordinator.mode != MODE_MANUAL:

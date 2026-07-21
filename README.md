@@ -8,15 +8,19 @@ Unofficial Home Assistant custom integration for BEAMS reef aquarium lights.
 
 This project is not affiliated with, endorsed by, or supported by BeautifulReef or BEAMS.
 
+Русская версия: [README.ru.md](README.ru.md)
+
 ## Features
 
-- Main light entity with on/off and brightness-style control
-- Auto/manual mode selector
-- 10 spectral channel controls
+- Read-only main-light indicator
+- Auto/manual mode switch
+- Overall brightness and 10 spectral channel controls
 - Spectrum selector from the controller gallery
 - Current daily-cycle DLI sensor
 - Current PPFD sensors for `@25 cm`, `@35 cm`, and `@45 cm`
-- Estimated power, light model, uptime, and cycle timepoint sensors
+- Estimated power, light model, uptime, cycle timepoint, and light-uniformity sensors
+- Controller ID, assembly count, and TrueSpectrum, OS, kernel, and LCS diagnostic versions
+- Built-in Lovelace cards for colour-coded channel sliders and the current spectral distribution
 - Services for setting channels, switching mode, applying spectra, and refreshing the spectrum gallery
 
 ## Supported devices
@@ -69,63 +73,94 @@ No YAML configuration is required.
 
 ## Entities
 
-### Light
+### Main light indicator
 
 ```text
-light.beams_light
+binary_sensor.<device_id>_light
 ```
 
-Basic light control. For accurate spectral control, use the channel entities.
+Reports whether at least one light channel is active. It is an indicator only and cannot change the controller state.
 
-### Selects
+### Mode and spectrum
 
 ```text
-select.beams_light_mode
-select.beams_light_spectrum
+switch.<device_id>_manual_mode
+select.<device_id>_spectrum
 ```
 
-Modes:
+Turn on `switch.<device_id>_manual_mode` for manual control. Turn it off for automatic daily-cycle control.
 
-```text
-auto
-manual
-```
+In auto mode, the brightness and individual channel controls are unavailable. The spectrum selector displays `Авто: дневной цикл`; the controller interpolates between daily-cycle points, so it does not have a single fixed spectrum name.
 
 The spectrum selector applies saved spectra from the controller gallery.
 
-### Channels
+### Brightness and channels
 
 ```text
-number.beams_light_ch1_dark_violet_410_420_nm
-number.beams_light_ch2_violet_420_430_nm
-number.beams_light_ch3_indigo_440_445_nm
-number.beams_light_ch4_blue_455_460_nm
-number.beams_light_ch5_sky_blue_475_480_nm
-number.beams_light_ch6_turquoise_496_500_nm
-number.beams_light_ch7_green_525_530_nm
-number.beams_light_ch8_mint_556_nm
-number.beams_light_ch9_pc_amber_595_nm
-number.beams_light_ch10_red_624_634_nm
+number.<device_id>_brightness
+number.<device_id>_ch1_<led_type>
+...
+number.<device_id>_ch10_<led_type>
 ```
 
-Values are shown as `0–100%` in Home Assistant.
+Values are shown as `0–100%` in Home Assistant. Changing the overall brightness preserves the relative channel levels. Changing a value switches the controller to manual mode.
+
+Entity IDs include the configured device ID and the LED type returned by the controller. Use the entity IDs created for your device in Home Assistant.
+
+Each channel exposes a `color` attribute from `/api/kit`, which can be used by custom Lovelace cards.
 
 ### Sensors
 
 ```text
-sensor.beams_light_current_cycle_dli
-sensor.beams_light_ppfd_25cm
-sensor.beams_light_ppfd_35cm
-sensor.beams_light_ppfd_45cm
-sensor.beams_light_estimated_power
-sensor.beams_light_light_model
-sensor.beams_light_uptime
-sensor.beams_light_cycle_timepoint
+sensor.<device_id>_current_cycle_dli
+sensor.<device_id>_ppfd_25_cm
+sensor.<device_id>_ppfd_35_cm
+sensor.<device_id>_ppfd_45_cm
+sensor.<device_id>_estimated_power
+sensor.<device_id>_light_model
+sensor.<device_id>_uptime
+sensor.<device_id>_cycle_timepoint
+sensor.<device_id>_light_uniformity
+sensor.<device_id>_assembly_count
+sensor.<device_id>_controller_id
+sensor.<device_id>_kernel
+sensor.<device_id>_lcs
+sensor.<device_id>_operating_system
+sensor.<device_id>_user_interface
 ```
 
 `uptime` is displayed as days, hours, and minutes. `cycle_timepoint` is displayed as hours and minutes.
 
 DLI is calculated from the current daily cycle data exposed by the controller. PPFD uses native coefficients when available and falls back to controller kit PPFD data.
+
+The device page includes the model ID and number of assemblies. The controller ID is available as a diagnostic sensor. Version sensors are labelled **Kernel version**, **LCS version**, **OS version**, and **TrueSpectrum version**.
+
+## Lovelace cards
+
+The integration automatically registers two custom cards; no additional frontend resource is needed.
+
+### Colour-coded channels
+
+```yaml
+type: custom:beams-channel-card
+title: BEAMS Channels
+entities:
+  - number.<device_id>_ch1_<led_type>
+  - number.<device_id>_ch2_<led_type>
+  # Add the remaining channel entities here.
+```
+
+The sliders use the colour reported by the controller and become inactive in auto mode.
+
+### Current spectrum
+
+```yaml
+type: custom:beams-spectrum-card
+title: Current spectrum
+entity: binary_sensor.<device_id>_light
+```
+
+The card reproduces the TrueSpectrum calculation using the current channel levels and LED spectral curves returned by `GET /api/led`.
 
 ## Services
 
@@ -200,6 +235,7 @@ If DLI or PPFD sensors are unavailable, check that the controller returns data f
 /api/state/full
 /api/kit
 /api/math/get
+/api/led
 ```
 
 ## License

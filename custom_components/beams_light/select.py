@@ -8,7 +8,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, MODE_AUTO, MODE_MANUAL
+from .const import DOMAIN, MODE_AUTO
 from .coordinator import BeamsCoordinator
 from .entity import BeamsEntity
 
@@ -19,31 +19,14 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: BeamsCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([BeamsModeSelect(coordinator), BeamsSpectrumSelect(coordinator)])
-
-
-class BeamsModeSelect(BeamsEntity, SelectEntity):
-    """Mode select: auto/manual."""
-
-    _attr_name = "Mode"
-    _attr_options = [MODE_AUTO, MODE_MANUAL]
-
-    def __init__(self, coordinator: BeamsCoordinator) -> None:
-        super().__init__(coordinator)
-        self._attr_unique_id = f"{coordinator.entry.entry_id}_mode"
-
-    @property
-    def current_option(self) -> str:
-        return self.coordinator.mode
-
-    async def async_select_option(self, option: str) -> None:
-        await self.coordinator.async_set_mode(option)
+    async_add_entities([BeamsSpectrumSelect(coordinator)])
 
 
 class BeamsSpectrumSelect(BeamsEntity, SelectEntity):
     """Spectrum gallery select. Selecting an option applies it to the channels."""
 
     _attr_name = "Spectrum"
+    _auto_option = "Авто: дневной цикл"
 
     def __init__(self, coordinator: BeamsCoordinator) -> None:
         super().__init__(coordinator)
@@ -51,10 +34,15 @@ class BeamsSpectrumSelect(BeamsEntity, SelectEntity):
 
     @property
     def options(self) -> list[str]:
-        return self.coordinator.spectrum_options
+        options = self.coordinator.spectrum_options
+        if self.coordinator.mode == MODE_AUTO:
+            return [self._auto_option, *options]
+        return options
 
     @property
     def current_option(self) -> str | None:
+        if self.coordinator.mode == MODE_AUTO:
+            return self._auto_option
         return self.coordinator.current_spectrum_option
 
     @property
@@ -73,4 +61,7 @@ class BeamsSpectrumSelect(BeamsEntity, SelectEntity):
         }
 
     async def async_select_option(self, option: str) -> None:
+        if option == self._auto_option:
+            await self.coordinator.async_set_mode(MODE_AUTO)
+            return
         await self.coordinator.async_apply_spectrum(option)

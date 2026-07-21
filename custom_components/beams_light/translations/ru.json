@@ -9,6 +9,14 @@
           "host": "Хост или URL",
           "name": "Название"
         }
+      },
+      "reconfigure": {
+        "title": "Перенастройка BEAMS Light",
+        "description": "Обновите локальный адрес контроллера BEAMS.",
+        "data": {
+          "host": "Хост или URL",
+          "name": "Название"
+        }
       }
     },
     "error": {
@@ -16,10 +24,21 @@
       "unknown": "Неизвестная ошибка"
     },
     "abort": {
-      "already_configured": "Этот контроллер BEAMS уже добавлен"
+      "already_configured": "Этот контроллер BEAMS уже добавлен",
+      "reconfigure_successful": "BEAMS Light успешно перенастроен",
+      "wrong_device": "Контроллер не соответствует этой записи конфигурации"
     }
   },
   "entity": {
+    "binary_sensor": {
+      "light_status": {
+        "name": "Свет",
+        "state": {
+          "off": "Свет не включен",
+          "on": "Свет включен"
+        }
+      }
+    },
     "sensor": {
       "estimated_power": {
         "name": "Расчётная мощность"
@@ -44,6 +63,43 @@
       },
       "uptime": {
         "name": "Время работы"
+      },
+      "light_uniformity": {
+        "name": "Равномерность",
+        "state": {
+          "excellent": "Отлично",
+          "good": "Хорошо",
+          "acceptable": "Приемлемо",
+          "unacceptable": "Низкая"
+        }
+      },
+      "assembly_count": {
+        "name": "Количество сборок"
+      },
+      "controller_id": {
+        "name": "ID контроллера"
+      },
+      "software_kernel": {
+        "name": "Версия ядра"
+      },
+      "software_lcs": {
+        "name": "Версия LCS"
+      },
+      "software_os": {
+        "name": "Версия OS"
+      },
+      "software_ui": {
+        "name": "Версия TrueSpectrum"
+      }
+    },
+    "number": {
+      "brightness": {
+        "name": "Яркость"
+      }
+    },
+    "switch": {
+      "manual_mode": {
+        "name": "Ручной режим"
       }
     }
   }

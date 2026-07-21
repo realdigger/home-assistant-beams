@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Home Assistant local runtime data
+.storage/
+.homeassistant/
+home-assistant.log
+home-assistant.log.*
+home-assistant_v2.db
+home-assistant_v2.db-*
+secrets.yaml
+known_devices.yaml
+
+# Local configuration and editor files
+.env
+.env.*
+.tmp/
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Generated files
+*.log
+*.zip
+*.tar.gz
+*.tgz

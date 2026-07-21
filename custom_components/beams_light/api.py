@@ -50,6 +50,15 @@ def as_float_channels(value: Any) -> list[float]:
     return result
 
 
+def as_bool(value: Any) -> bool:
+    """Parse boolean values returned as JSON booleans, numbers, or strings."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 class BeamsLightApi:
     """Client for the BEAMS REST API used by the built-in web UI."""
 
@@ -135,10 +144,6 @@ class BeamsLightApi:
         data = await self.async_get("system/network/getwlanconfig")
         return data if isinstance(data, dict) else {}
 
-    async def async_get_datetime(self) -> dict[str, Any]:
-        data = await self.async_get("system/datetime/get")
-        return data if isinstance(data, dict) else {}
-
     async def async_get_state(self) -> dict[str, Any]:
         data = await self.async_get("state/get")
         return data if isinstance(data, dict) else {}
@@ -160,12 +165,17 @@ class BeamsLightApi:
             return []
         return [item for item in data if isinstance(item, dict)]
 
+    async def async_get_leds(self) -> list[dict[str, Any]]:
+        """Get LED spectral curves used by the controller UI."""
+        data = await self.async_get("led")
+        if not isinstance(data, list):
+            return []
+        return [item for item in data if isinstance(item, dict)]
+
     async def async_get_data(self) -> dict[str, Any]:
         """Fetch the practical state used by Home Assistant."""
         state: dict[str, Any] = {}
         full: dict[str, Any] = {}
-        kit: dict[str, Any] = {}
-        runtime_info: dict[str, Any] = {}
         channels: list[float] = []
 
         errors: list[Exception] = []
@@ -176,54 +186,40 @@ class BeamsLightApi:
             errors.append(err)
 
         try:
-            channels = await self.async_get_channels()
-        except BeamsApiError as err:
-            errors.append(err)
-
-        try:
             full = await self.async_get_full_state()
         except BeamsApiError:
             full = {}
 
-        try:
-            kit = await self.async_get_kit()
-        except BeamsApiError:
-            kit = {}
-
-        try:
-            runtime_info = await self.async_info()
-        except BeamsApiError:
-            runtime_info = {}
+        channels = as_float_channels(full.get("channels")) or as_float_channels(state.get("channels"))
+        if not channels:
+            try:
+                channels = await self.async_get_channels()
+            except BeamsApiError as err:
+                errors.append(err)
 
         if not state and not full and not channels:
             if errors:
                 raise BeamsCannotConnect(str(errors[-1])) from errors[-1]
             raise BeamsCannotConnect("No usable data returned by the controller")
 
-        if not channels:
-            channels = as_float_channels(full.get("channels")) or as_float_channels(state.get("channels"))
 
         manual_keys = ("manual", "isManual", "manualMode")
         manual_known = any(key in state for key in manual_keys) or any(key in full for key in manual_keys)
-        manual = bool(
-            state.get("manual")
-            or state.get("isManual")
-            or state.get("manualMode")
-            or full.get("manual")
-            or full.get("isManual")
-            or full.get("manualMode")
+        manual = any(
+            as_bool(source.get(key))
+            for source in (state, full)
+            for key in manual_keys
+            if key in source
         )
 
         return {
             "state": state,
             "full": full,
-            "kit": kit,
-            "runtime_info": runtime_info,
             "channels": channels,
             "manual": manual,
             "manual_known": manual_known,
-            "long_cycle": bool(state.get("longCycle", False)),
-            "slave": bool(state.get("slave", False)),
+            "long_cycle": as_bool(state.get("longCycle", False)),
+            "slave": as_bool(state.get("slave", False)),
         }
 
     async def async_set_manual(self, manual: bool) -> None:

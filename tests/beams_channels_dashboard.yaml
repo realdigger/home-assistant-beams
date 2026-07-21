@@ -1,0 +1,21 @@
+title: BEAMS Channels
+views:
+  - title: Channels
+    path: channels
+    cards:
+      - type: custom:beams-spectrum-card
+        title: Текущий спектр
+        entity: binary_sensor.beams_2_pro_r_8_001_light
+      - type: custom:beams-channel-card
+        title: BEAMS Channels
+        entities:
+          - number.beams_2_pro_r_8_001_ch1_v_412
+          - number.beams_2_pro_r_8_001_ch2_v_425
+          - number.beams_2_pro_r_8_001_ch3_rb_440
+          - number.beams_2_pro_r_8_001_ch4_rb_455x2
+          - number.beams_2_pro_r_8_001_ch5_b_470x2
+          - number.beams_2_pro_r_8_001_ch6_cy_496
+          - number.beams_2_pro_r_8_001_ch7_g_522
+          - number.beams_2_pro_r_8_001_ch8_mn_556
+          - number.beams_2_pro_r_8_001_ch9_pa_595
+          - number.beams_2_pro_r_8_001_ch10_r_630

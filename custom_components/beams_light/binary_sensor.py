@@ -1,9 +1,9 @@
-"""Light platform for BEAMS Light."""
+"""Read-only light state platform for BEAMS Light."""
 from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.light import ATTR_BRIGHTNESS, ColorMode, LightEntity
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -18,16 +18,17 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    """Set up the read-only BEAMS light state entity."""
     coordinator: BeamsCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([BeamsLight(coordinator)])
+    async_add_entities([BeamsLightStatus(coordinator)])
 
 
-class BeamsLight(BeamsEntity, LightEntity):
-    """Main BEAMS light entity."""
+class BeamsLightStatus(BeamsEntity, BinarySensorEntity):
+    """Read-only indicator for whether any BEAMS channel is active."""
 
-    _attr_name = None
-    _attr_supported_color_modes = {ColorMode.BRIGHTNESS}
-    _attr_color_mode = ColorMode.BRIGHTNESS
+    _attr_name = "Light"
+    _attr_device_class = BinarySensorDeviceClass.LIGHT
+    _attr_translation_key = "light_status"
 
     def __init__(self, coordinator: BeamsCoordinator) -> None:
         super().__init__(coordinator)
@@ -36,13 +37,6 @@ class BeamsLight(BeamsEntity, LightEntity):
     @property
     def is_on(self) -> bool:
         return any(value > 0.0001 for value in self.coordinator.channels)
-
-    @property
-    def brightness(self) -> int | None:
-        channels = self.coordinator.channels
-        if not channels:
-            return 0
-        return round(max(channels) * 255)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -57,15 +51,13 @@ class BeamsLight(BeamsEntity, LightEntity):
             attrs["dli"] = round(self.coordinator.dli, 1)
         if self.coordinator.estimated_power is not None:
             attrs["estimated_power_w"] = self.coordinator.estimated_power
+        spectrum_points = self.coordinator.spectral_distribution
+        if spectrum_points:
+            attrs["spectrum_points"] = spectrum_points
+            attrs["spectrum_source"] = "calculated: current channels + api/led"
         spectrum = self.coordinator.current_spectrum
         if spectrum is not None:
             attrs["spectrum"] = spectrum.get("option")
             attrs["spectrum_id"] = spectrum.get("id")
             attrs["spectrum_total_ppfd"] = spectrum.get("total_ppfd")
         return attrs
-
-    async def async_turn_on(self, **kwargs: Any) -> None:
-        await self.coordinator.async_turn_on(kwargs.get(ATTR_BRIGHTNESS))
-
-    async def async_turn_off(self, **kwargs: Any) -> None:
-        await self.coordinator.async_turn_off()

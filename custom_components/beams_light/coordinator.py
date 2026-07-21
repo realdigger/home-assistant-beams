@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import logging
 import re
+from asyncio import gather
 from datetime import datetime, timezone
+from time import monotonic
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -753,6 +755,7 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.entry = entry
         self.api = api
         self._static_cache: dict[str, Any] | None = None
+        self._info_received_monotonic: float | None = None
         self._manual_override: bool | None = None
         self._last_spectrum_option: str | None = entry.options.get(CONF_LAST_SPECTRUM)
         super().__init__(
@@ -794,76 +797,64 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
 
     async def _async_get_static_data(self, data: dict[str, Any]) -> dict[str, Any]:
-        network: dict[str, Any] = {}
+        kit: dict[str, Any] = {}
         info: dict[str, Any] = {}
         ui: dict[str, Any] = {}
         math: Any = {}
-        datetime_data: dict[str, Any] = {}
         spectrums: list[dict[str, Any]] = []
+        leds: list[dict[str, Any]] = []
 
-        try:
-            network = await self.api.async_get_network()
-        except BeamsApiError:
-            network = {}
-        try:
-            info = await self.api.async_info()
-        except BeamsApiError:
-            info = {}
-        try:
-            ui = await self.api.async_get_ui()
-        except BeamsApiError:
-            ui = {}
-        try:
-            math = await self.api.async_get_math()
-        except BeamsApiError:
-            math = {}
-        try:
-            datetime_data = await self.api.async_get_datetime()
-        except BeamsApiError:
-            datetime_data = {}
-        try:
-            spectrums = self._normalize_spectrums(await self.api.async_get_spectrums())
-        except BeamsApiError:
-            spectrums = []
+        kit_result, info_result, ui_result, math_result, spectrums_result, leds_result = await gather(
+            self.api.async_get_kit(),
+            self.api.async_info(),
+            self.api.async_get_ui(),
+            self.api.async_get_math(),
+            self.api.async_get_spectrums(),
+            self.api.async_get_leds(),
+            return_exceptions=True,
+        )
+        if isinstance(kit_result, dict):
+            kit = kit_result
+        if isinstance(info_result, dict):
+            info = info_result
+            self._info_received_monotonic = monotonic()
+        if isinstance(ui_result, dict):
+            ui = ui_result
+        if isinstance(math_result, (dict, list)):
+            math = math_result
+        if isinstance(spectrums_result, list):
+            spectrums = self._normalize_spectrums(spectrums_result)
+        if isinstance(leds_result, list):
+            leds = leds_result
 
         return {
-            "device_info": self._build_device_info(data, network, info),
-            "network": network,
+            "kit": kit,
+            "device_info": self._build_device_info(kit, info),
             "info": info,
             "ui": ui,
             "math": math,
-            "datetime": datetime_data,
             "spectrums": spectrums,
+            "leds": leds,
         }
 
     def _build_device_info(
         self,
-        data: dict[str, Any],
-        network: dict[str, Any],
+        kit: dict[str, Any],
         info: dict[str, Any],
     ) -> dict[str, Any]:
-        kit = data.get("kit") or {}
-        ap = network.get("AP") if isinstance(network.get("AP"), dict) else {}
         general = info.get("general") if isinstance(info.get("general"), dict) else {}
 
-        name = general.get("hostName") or ap.get("ssid") or self.entry.title
+        name = general.get("hostName") or self.entry.title
         model = kit.get("kit_name") or kit.get("device_name") or "BEAMS Light"
         device_id = general.get("deviceId") or name or self.entry.entry_id
-
-        sw_version = general.get("swVersion")
-        build_number = general.get("buildNumber")
-        if sw_version and build_number:
-            sw_version = f"{sw_version} / build {build_number}"
-        elif build_number:
-            sw_version = f"build {build_number}"
 
         return {
             "ident": str(device_id),
             "name": name,
             "model": model,
-            "sw_version": sw_version,
+            "model_id": kit.get("spec_alias"),
+            "sw_version": general.get("swVersion"),
             "hw_version": general.get("hwVersion"),
-            "spec_alias": kit.get("spec_alias"),
         }
 
     def _detect_channel_count(self, data: dict[str, Any]) -> int:
@@ -1105,14 +1096,12 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """DLI of the currently selected daily cycle, in mol/m²/day."""
         daily_cycle = self.current_daily_cycle
 
-        # The native UI does not read DLI from a dedicated API field for the active cycle.
-        # It calculates DLI from dailyCycle.spectrums, per-channel totalPPFD from /api/kit,
-        # optional aquarium setup correction, and math.led_correction.value.
         calculated = self._calculate_daily_cycle_dli(daily_cycle)
         if calculated is not None:
             return calculated
 
-        # Fallback for gallery/precomputed payloads from some firmware builds.
+        # Fall back to firmware-provided DLI only when the native calculation
+        # cannot be reproduced from the available controller data.
         value = _find_first_number_by_key(daily_cycle, DLI_KEYS, max_depth=3)
         if value is not None:
             return value
@@ -1175,6 +1164,82 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     return result
         return None
 
+    def _native_ui_ppfd_ratio_for_height(self, height_cm: int) -> float | None:
+        """Calculate the @35/@45cm ratio used by the native controller UI."""
+        if height_cm not in (35, 45):
+            return None
+
+        ui = (self.data or {}).get("ui") or {}
+        quest_form = ui.get("questForm") if isinstance(ui.get("questForm"), dict) else None
+        if not quest_form or not _is_truthy(quest_form.get("isComplete")):
+            return None
+
+        length = _safe_float(quest_form.get("length"))
+        width = _safe_float(quest_form.get("width"))
+        if length is None or width is None or length <= 0 or width <= 0:
+            return None
+
+        assemblies = 0.0
+        led_counts = quest_form.get("ledCounts")
+        if isinstance(led_counts, dict):
+            for model, count in led_counts.items():
+                assemblies += BEAMS_ASSEMBLY_COUNTS.get(str(model), 0) * (_safe_float(count, 0.0) or 0.0)
+        if assemblies <= 0:
+            return None
+
+        density_factor = {
+            "weak": 1.0,
+            "average": 0.9,
+            "dense": 0.8,
+        }.get(str(quest_form.get("density") or "weak").lower(), 1.0)
+        assemblies_per_m2 = assemblies / ((length / 100) * (width / 100))
+        ratio_35cm = min(0.57 + 0.009 * assemblies_per_m2, 0.96) * density_factor
+        if height_cm == 35:
+            return ratio_35cm
+
+        return min(
+            min(0.28 + 0.018 * assemblies_per_m2, 0.96) * density_factor,
+            ratio_35cm - 0.05,
+        )
+
+    @property
+    def light_uniformity(self) -> str | None:
+        """Return the native UI light uniformity category for the default @25cm view."""
+        ui = (self.data or {}).get("ui") or {}
+        quest_form = ui.get("questForm") if isinstance(ui.get("questForm"), dict) else None
+        if not quest_form or not _is_truthy(quest_form.get("isComplete")):
+            return None
+
+        length = _safe_float(quest_form.get("length"))
+        width = _safe_float(quest_form.get("width"))
+        aquarium_type = str(quest_form.get("aquriumType") or "").lower()
+        if length is None or width is None or length <= 0 or width <= 0:
+            return None
+
+        assemblies = 0.0
+        led_counts = quest_form.get("ledCounts")
+        if isinstance(led_counts, dict):
+            for model, count in led_counts.items():
+                assemblies += BEAMS_ASSEMBLY_COUNTS.get(str(model), 0) * (_safe_float(count, 0.0) or 0.0)
+        if assemblies <= 0:
+            return None
+
+        kit_name = str(((self.data or {}).get("kit") or {}).get("kit_name") or "").upper()
+        if "MAX" in kit_name:
+            thresholds = {"excellent": 18, "good": 11, "acceptable": 9}
+        elif aquarium_type == "fresh":
+            thresholds = {"excellent": 29, "good": 19, "acceptable": 11}
+        elif aquarium_type == "salty":
+            thresholds = {"excellent": 34, "good": 25, "acceptable": 16}
+        else:
+            return None
+
+        assemblies_per_m2 = assemblies / ((length / 100) * (width / 100))
+        for category, threshold in thresholds.items():
+            if assemblies_per_m2 > threshold:
+                return category
+        return "unacceptable"
+
     def ppfd_cm(self, height_cm: int) -> float | None:
         """Calculate current PPFD at the requested height in µmol/m²/s."""
         channels = self.channels
@@ -1206,6 +1271,10 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if ratio is not None:
                 return round(native_25 * ratio, 2)
 
+            native_ui_ratio = self._native_ui_ppfd_ratio_for_height(height_cm)
+            if native_ui_ratio is not None:
+                return round(native_25 * native_ui_ratio, 2)
+
         # The spectrum gallery exposes totalPPFD for saved spectra in some firmware builds.
         # Use it as a last fallback for @25cm when the current manual channels exactly
         # match a gallery spectrum.
@@ -1232,6 +1301,9 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ratio = self._ppfd_ratio_for_height(height_cm)
             if ratio is not None:
                 return f"calculated: @25cm totalPPFD × controller ratio for @{height_cm}cm"
+            native_ui_ratio = self._native_ui_ppfd_ratio_for_height(height_cm)
+            if native_ui_ratio is not None:
+                return f"calculated: @25cm totalPPFD × native UI ratio for @{height_cm}cm"
             if height_cm in (35, 45):
                 return f"unavailable: no controller coefficients or ratio for @{height_cm}cm"
         if height_cm == 25 and self.current_spectrum is not None:
@@ -1293,17 +1365,52 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return str(value) if value else None
 
     @property
+    def assembly_count(self) -> int | None:
+        """Return the assembly count defined by the controller kit."""
+        kit = (self.data or {}).get("kit") or {}
+        specification = kit.get("specification") if isinstance(kit.get("specification"), dict) else {}
+        return _safe_int(specification.get("assembly_count"))
+
+    @property
+    def controller_id(self) -> str | None:
+        """Return the controller identifier exposed by the local API."""
+        device_info = (self.data or {}).get("device_info") or {}
+        value = device_info.get("ident")
+        return str(value) if value is not None else None
+
+    def software_version(self, component: str) -> str | None:
+        """Return one software component version from the controller UI payload."""
+        ui = (self.data or {}).get("ui") or {}
+        software = ui.get("software") if isinstance(ui.get("software"), dict) else {}
+        value = software.get(component)
+        if isinstance(value, dict):
+            value = value.get("version")
+        return str(value) if value is not None else None
+
+    def software_hash(self, component: str) -> str | None:
+        """Return one software component hash from the controller UI payload."""
+        ui = (self.data or {}).get("ui") or {}
+        software = ui.get("software") if isinstance(ui.get("software"), dict) else {}
+        value = software.get(component)
+        if not isinstance(value, dict):
+            return None
+        hash_value = value.get("hash")
+        return str(hash_value) if hash_value is not None else None
+
+    @property
     def uptime_seconds(self) -> float | None:
         """Controller uptime in seconds, when exposed by the controller API."""
         data = self.data or {}
 
-        # /info is the most likely place for runtime diagnostics. It is fetched on every update
-        # as runtime_info and also once as info in the static cache.
-        for root_key in ("runtime_info", "info"):
+        # /info is cached during setup; advance its reported uptime locally between polls.
+        for root_key in ("info",):
             root = data.get(root_key)
             if isinstance(root, dict):
                 value = _find_uptime_seconds(root, max_depth=5, include_boot_time=True)
                 if value is not None:
+                    received_at = getattr(self, "_info_received_monotonic", None)
+                    if received_at is not None:
+                        value += max(monotonic() - received_at, 0.0)
                     return value
 
         # Some firmware builds may expose uptime directly in state payloads. Do not use
@@ -1490,3 +1597,53 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if index < len(CHANNEL_NAMES):
             return CHANNEL_NAMES[index]
         return f"Channel {index + 1}"
+
+    def channel_color(self, index: int) -> str | None:
+        """Return the channel display color provided by the controller kit."""
+        kit = (self.data or {}).get("kit") or {}
+        channels = kit.get("channels")
+        if not isinstance(channels, list) or index >= len(channels):
+            return None
+        channel = channels[index]
+        if not isinstance(channel, dict):
+            return None
+        color = channel.get("color")
+        return str(color) if isinstance(color, str) and color.startswith("#") else None
+
+    @property
+    def spectral_distribution(self) -> list[list[float]]:
+        """Calculate the current spectrum with the controller's LED curves."""
+        kit = (self.data or {}).get("kit") or {}
+        kit_channels = kit.get("channels")
+        led_curves = (self.data or {}).get("leds")
+        if not isinstance(kit_channels, list) or not isinstance(led_curves, list):
+            return []
+
+        curves_by_type = {
+            str(item.get("type")): item.get("spectrum")
+            for item in led_curves
+            if isinstance(item, dict) and item.get("type") and isinstance(item.get("spectrum"), list)
+        }
+        points: dict[int, float] = {}
+        for index, level in enumerate(self.channels):
+            if index >= len(kit_channels) or not isinstance(kit_channels[index], dict):
+                continue
+            leds = kit_channels[index].get("leds")
+            if not isinstance(leds, list):
+                continue
+            for led in leds:
+                if not isinstance(led, dict):
+                    continue
+                curve = curves_by_type.get(str(led.get("type")))
+                count = _safe_float(led.get("count"), 1.0) or 0.0
+                if not curve or count <= 0:
+                    continue
+                for item in curve:
+                    if not isinstance(item, list) or len(item) < 2:
+                        continue
+                    wavelength = _safe_int(item[0])
+                    value = _safe_float(item[1])
+                    if wavelength is None or value is None:
+                        continue
+                    points[wavelength] = points.get(wavelength, 0.0) + value * level * count
+        return [[wavelength, round(value, 6)] for wavelength, value in sorted(points.items())]
