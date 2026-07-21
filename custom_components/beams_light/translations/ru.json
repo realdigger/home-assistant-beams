@@ -4,17 +4,17 @@
     "step": {
       "user": {
         "title": "BEAMS Light",
-        "description": "Введите локальный IP-адрес или URL контроллера BEAMS.",
+        "description": "Введите локальный IP-адрес, hostname или полный URL контроллера BEAMS. Примеры: 192.168.1.55, beams2.sensors.local или http://beams2.sensors.local.",
         "data": {
-          "host": "Хост или URL",
+          "host": "IP-адрес, hostname или URL",
           "name": "Название"
         }
       },
       "reconfigure": {
         "title": "Перенастройка BEAMS Light",
-        "description": "Обновите локальный адрес контроллера BEAMS.",
+        "description": "Введите локальный IP-адрес, hostname или полный URL контроллера BEAMS.",
         "data": {
-          "host": "Хост или URL",
+          "host": "IP-адрес, hostname или URL",
           "name": "Название"
         }
       }
@@ -34,14 +34,14 @@
       "light_status": {
         "name": "Свет",
         "state": {
-          "off": "Свет не включен",
-          "on": "Свет включен"
+          "off": "Не включен",
+          "on": "Включен"
         }
       }
     },
     "sensor": {
       "estimated_power": {
-        "name": "Расчётная мощность"
+        "name": "Мощность"
       },
       "timepoint": {
         "name": "Точка дневного цикла"
@@ -98,6 +98,9 @@
       }
     },
     "switch": {
+      "service_mode": {
+        "name": "Сервисный режим"
+      },
       "manual_mode": {
         "name": "Ручной режим"
       }

@@ -63,7 +63,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
 class BeamsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for BEAMS Light."""
 
-    VERSION = 5
+    VERSION = 8
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
         errors: dict[str, str] = {}

@@ -91,7 +91,7 @@ def _get_target_coordinator(hass: HomeAssistant, call: ServiceCall) -> BeamsCoor
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Migrate the former controllable light into a read-only binary sensor."""
-    if entry.version > 5:
+    if entry.version > 8:
         return False
     if entry.version < 2:
         entity_registry = er.async_get(hass)
@@ -118,7 +118,35 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if registry_entry.unique_id == old_unique_id:
                 entity_registry.async_remove(entity_id)
                 break
-    hass.config_entries.async_update_entry(entry, version=5, minor_version=entry.minor_version)
+    if entry.version < 6:
+        entity_registry = er.async_get(hass)
+        old_entity_id = entity_registry.async_get_entity_id(
+            Platform.BUTTON,
+            DOMAIN,
+            f"{entry.entry_id}_service_mode",
+        )
+        if old_entity_id is not None:
+            entity_registry.async_remove(old_entity_id)
+    if entry.version < 7:
+        entity_registry = er.async_get(hass)
+        service_mode_unique_id = f"{entry.entry_id}_service_mode"
+        manual_mode_unique_id = f"{entry.entry_id}_mode"
+        for entity_id, registry_entry in entity_registry.entities.items():
+            if registry_entry.unique_id == service_mode_unique_id and entity_id.startswith("button."):
+                entity_registry.async_remove(entity_id)
+            elif registry_entry.unique_id == manual_mode_unique_id:
+                entity_registry.async_update_entity(entity_id, original_name=None)
+    if entry.version < 8:
+        entity_registry = er.async_get(hass)
+        names_by_unique_id = {
+            f"{entry.entry_id}_mode": "Ручной режим",
+            f"{entry.entry_id}_service_mode": "Сервисный режим",
+        }
+        for entity_id, registry_entry in entity_registry.entities.items():
+            name = names_by_unique_id.get(registry_entry.unique_id)
+            if name is not None:
+                entity_registry.async_update_entity(entity_id, original_name=name)
+    hass.config_entries.async_update_entry(entry, version=8, minor_version=entry.minor_version)
     return True
 
 

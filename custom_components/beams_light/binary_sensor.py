@@ -26,7 +26,7 @@ async def async_setup_entry(
 class BeamsLightStatus(BeamsEntity, BinarySensorEntity):
     """Read-only indicator for whether any BEAMS channel is active."""
 
-    _attr_name = "Light"
+    _attr_name = "Свет"
     _attr_device_class = BinarySensorDeviceClass.LIGHT
     _attr_translation_key = "light_status"
 

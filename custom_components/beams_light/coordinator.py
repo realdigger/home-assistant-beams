@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 import re
-from asyncio import gather
+from asyncio import gather, sleep
 from datetime import datetime, timezone
 from time import monotonic
 from typing import Any
@@ -13,7 +13,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import BeamsApiError, BeamsLightApi, as_float_channels
+from .api import BeamsApiError, BeamsLightApi, as_bool, as_float_channels
 from .const import (
     CHANNEL_NAMES,
     CONF_LAST_MODE,
@@ -31,6 +31,8 @@ _LOGGER = logging.getLogger(__name__)
 
 SPECTRUM_MATCH_TOLERANCE = 0.0006
 SECONDS_PER_DAY = 86_400
+MANUAL_MODE_SETTLE_DELAY = 0.2
+MANUAL_MODE_CONFIRM_ATTEMPTS = 10
 
 # Same assembly-count map as used by the native controller UI when applying
 # aquarium setup corrections to PPFD/DLI calculations.
@@ -1514,7 +1516,7 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         option = str(spectrum.get("option") or spectrum.get("name") or selector)
         self._last_spectrum_option = option
         self.save_last_spectrum(option)
-        await self.async_set_channels(channels, ensure_manual=True)
+        await self.async_set_channels(channels, ensure_manual=True, force_manual=True)
 
     async def async_set_mode(self, mode: str) -> None:
         if mode == MODE_MANUAL:
@@ -1539,14 +1541,36 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise HomeAssistantError(f"Unsupported BEAMS mode: {mode}")
         await self.async_request_refresh()
 
-    async def async_set_channels(self, channels: list[float], *, ensure_manual: bool = True) -> None:
+    async def async_set_channels(
+        self,
+        channels: list[float],
+        *,
+        ensure_manual: bool = True,
+        force_manual: bool = False,
+    ) -> None:
         channels = [clamp_channel(value) for value in channels]
         if ensure_manual:
-            # Match the native UI sequence when leaving automatic mode.
             self._manual_override = True
-            await self.api.async_set_channels(channels)
-            if not self.is_manual:
+            if force_manual:
+                was_manual = self.is_manual
                 await self.api.async_set_manual(True)
+                if not was_manual:
+                    # Wait until the controller confirms Manual mode before
+                    # sending the selected spectrum's channel values.
+                    for _ in range(MANUAL_MODE_CONFIRM_ATTEMPTS):
+                        await sleep(MANUAL_MODE_SETTLE_DELAY)
+                        try:
+                            state = await self.api.async_get_state()
+                        except BeamsApiError:
+                            break
+                        if as_bool(state.get("manual")):
+                            break
+                await self.api.async_set_channels(channels)
+            else:
+                # Match the native UI sequence when leaving automatic mode.
+                await self.api.async_set_channels(channels)
+                if not self.is_manual:
+                    await self.api.async_set_manual(True)
         else:
             await self.api.async_set_channels(channels)
         self.save_manual_channels(channels)
@@ -1562,6 +1586,14 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not self.is_manual:
             await self.api.async_set_manual(True)
         await self.async_request_refresh()
+
+    async def async_activate_service_mode(self) -> None:
+        """Enable Manual mode with every channel at 20 percent."""
+        await self.async_set_channels(
+            [0.2] * self.channel_count,
+            ensure_manual=True,
+            force_manual=True,
+        )
 
     async def async_turn_on(self, brightness: int | None = None) -> None:
         channels = self.get_saved_manual_channels()

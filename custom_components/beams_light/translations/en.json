@@ -4,17 +4,17 @@
     "step": {
       "user": {
         "title": "BEAMS Light",
-        "description": "Enter the local IP address or URL of the BEAMS controller.",
+        "description": "Enter the local IP address, hostname, or full URL of the BEAMS controller. Examples: 192.168.1.55, beams2.sensors.local, or http://beams2.sensors.local.",
         "data": {
-          "host": "Host or URL",
+          "host": "IP address, hostname, or URL",
           "name": "Name"
         }
       },
       "reconfigure": {
         "title": "Reconfigure BEAMS Light",
-        "description": "Update the local address of the BEAMS controller.",
+        "description": "Enter the local IP address, hostname, or full URL of the BEAMS controller.",
         "data": {
-          "host": "Host or URL",
+          "host": "IP address, hostname, or URL",
           "name": "Name"
         }
       }
@@ -32,7 +32,7 @@
   "entity": {
     "binary_sensor": {
       "light_status": {
-        "name": "Light",
+        "name": "Свет",
         "state": {
           "off": "Light is off",
           "on": "Light is on"
@@ -98,6 +98,9 @@
       }
     },
     "switch": {
+      "service_mode": {
+        "name": "Service mode"
+      },
       "manual_mode": {
         "name": "Manual mode"
       }
