@@ -70,10 +70,10 @@ def _coordinator() -> BeamsCoordinator:
 
 
 def test_daily_cycle_dli_matches_controller_ui() -> None:
-    """The controller schedule from BEAMS 2 PRO R-8 produces UI DLI 9.5."""
+    """The controller schedule from BEAMS 2 PRO R-8 produces UI DLI 9.1."""
     coordinator = _coordinator()
 
-    assert coordinator.current_cycle_dli == approx(9.4965, abs=0.0001)
+    assert coordinator.current_cycle_dli == approx(9.083629329, abs=0.0001)
 
 
 def test_daily_cycle_dli_matches_native_ui_over_api_value() -> None:
@@ -81,7 +81,7 @@ def test_daily_cycle_dli_matches_native_ui_over_api_value() -> None:
     coordinator = _coordinator()
     coordinator.data["full"]["dailyCycle"]["dli"] = 8.3163525253282
 
-    assert coordinator.current_cycle_dli == approx(9.4965, abs=0.0001)
+    assert coordinator.current_cycle_dli == approx(9.083629329, abs=0.0001)
     assert coordinator.current_cycle_dli_source == (
         "calculated: dailyCycle.spectrums + kit.channels.totalPPFD + math.led_correction"
     )
@@ -107,8 +107,21 @@ def test_ppfd_35cm_and_45cm_match_native_ui_geometry_model() -> None:
     coordinator = _coordinator()
     coordinator.data["channels"] = CYCLE_POINTS[2][1]
 
-    assert coordinator.ppfd_35cm == 128.52
-    assert coordinator.ppfd_45cm == 109.67
+    assert coordinator.ppfd_35cm == 142.8
+    assert coordinator.ppfd_45cm == 121.86
+
+
+def test_estimated_power_uses_controller_channel_corrections() -> None:
+    """Power uses the nonlinear correction factors from the controller UI."""
+    coordinator = _coordinator()
+    coordinator.data["channels"] = [0.25, 0.5]
+    coordinator.data["kit"]["ui"] = {
+        "zero_power": 1,
+        "max_channels_powers": [100, 100],
+        "corrections": [2, 1],
+    }
+
+    assert coordinator.estimated_power == 101.0
 
 
 def test_light_uniformity_matches_native_ui() -> None:

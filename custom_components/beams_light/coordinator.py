@@ -1389,6 +1389,7 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         kit = (self.data or {}).get("kit") or {}
         ui = kit.get("ui") if isinstance(kit.get("ui"), dict) else {}
         max_channel_powers = ui.get("max_channels_powers")
+        corrections = ui.get("corrections")
         zero_power = _safe_float(ui.get("zero_power"), 0.0) or 0.0
         if not isinstance(max_channel_powers, list):
             return None
@@ -1397,7 +1398,14 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if idx >= len(self.channels):
                 break
             value = _safe_float(max_power, 0.0) or 0.0
-            total += value * self.channels[idx]
+            correction = (
+                _safe_float(corrections[idx])
+                if isinstance(corrections, list) and idx < len(corrections)
+                else None
+            )
+            channel = max(min(self.channels[idx], 1.0), 0.0)
+            exponent = 1 / correction if correction and correction > 0 else 1
+            total += value * channel**exponent
         return round(total, 2)
 
 
