@@ -17,6 +17,13 @@
           "host": "IP address, hostname, or URL",
           "name": "Name"
         }
+      },
+      "init": {
+        "title": "Polling settings",
+        "description": "After one minute without a user action, the controller is polled at this interval.",
+        "data": {
+          "idle_scan_interval": "Idle polling interval (seconds)"
+        }
       }
     },
     "error": {

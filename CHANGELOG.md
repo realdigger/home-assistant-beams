@@ -5,6 +5,7 @@
 - Added device diagnostics, spectrum graph, colour-coded channel card, and controller spectrum data refresh.
 - Added controller URL, hostname, and IP address support during setup.
 - Brightness and channel values are now visible in auto mode; changes are rejected until manual mode is enabled.
+- Added a configurable idle polling interval; polling remains frequent for one minute after a user action.
 
 ## 0.8.3
 

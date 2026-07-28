@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import re
 from asyncio import gather, sleep
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from time import monotonic
 from typing import Any
 
@@ -16,6 +16,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .api import BeamsApiError, BeamsLightApi, as_bool, as_float_channels
 from .const import (
     CHANNEL_NAMES,
+    CONF_IDLE_SCAN_INTERVAL,
     CONF_LAST_MODE,
     CONF_LAST_SPECTRUM,
     CONF_MANUAL_DURATION_HOURS,
@@ -24,6 +25,7 @@ from .const import (
     CONF_MANUAL_SESSION_RENEWED_AT,
     CONF_MANUAL_SPECTRUM_MODE,
     DEFAULT_CHANNEL_COUNT,
+    DEFAULT_IDLE_SCAN_INTERVAL,
     DEFAULT_MANUAL_VALUE,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -41,6 +43,7 @@ MANUAL_MODE_SETTLE_DELAY = 0.2
 MANUAL_MODE_CONFIRM_ATTEMPTS = 10
 MANUAL_MODE_RENEWAL_INTERVAL = 50 * 60
 DEFAULT_MANUAL_DURATION_HOURS = 1
+ACTIVE_POLLING_DURATION = timedelta(minutes=1)
 
 # Same assembly-count map as used by the native controller UI when applying
 # aquarium setup corrections to PPFD/DLI calculations.
@@ -766,16 +769,43 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.api = api
         self._static_cache: dict[str, Any] | None = None
         self._info_received_monotonic: float | None = None
+        self._last_user_activity_monotonic: float | None = None
         self._manual_override: bool | None = None
         self._last_spectrum_option: str | None = entry.options.get(CONF_LAST_SPECTRUM)
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=DEFAULT_SCAN_INTERVAL,
+            update_interval=self.idle_scan_interval,
         )
 
+    @property
+    def idle_scan_interval(self) -> timedelta:
+        """Return the configured polling interval used outside recent activity."""
+        value = _safe_int(self.entry.options.get(CONF_IDLE_SCAN_INTERVAL))
+        if value is None or not 5 <= value <= 3600:
+            return DEFAULT_IDLE_SCAN_INTERVAL
+        return timedelta(seconds=value)
+
+    def _mark_user_activity(self) -> None:
+        """Use fast polling briefly after a user changes the controller."""
+        self._last_user_activity_monotonic = monotonic()
+        self.update_interval = DEFAULT_SCAN_INTERVAL
+
+    def _update_polling_interval(self) -> None:
+        """Switch back to the configured idle interval when activity has settled."""
+        if self._last_user_activity_monotonic is None:
+            interval = self.idle_scan_interval
+        elif monotonic() - self._last_user_activity_monotonic >= ACTIVE_POLLING_DURATION.total_seconds():
+            self._last_user_activity_monotonic = None
+            interval = self.idle_scan_interval
+        else:
+            interval = DEFAULT_SCAN_INTERVAL
+        if self.update_interval != interval:
+            self.update_interval = interval
+
     async def _async_update_data(self) -> dict[str, Any]:
+        self._update_polling_interval()
         try:
             data = await self.api.async_get_data()
         except BeamsApiError as err:
@@ -1506,6 +1536,7 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_set_manual_duration(self, hours: int) -> None:
         if hours not in range(1, 7):
             raise HomeAssistantError("Manual mode duration must be between 1 and 6 hours")
+        self._mark_user_activity()
         options = dict(self.entry.options)
         options[CONF_MANUAL_DURATION_HOURS] = hours
         self.hass.config_entries.async_update_entry(self.entry, options=options)
@@ -1592,6 +1623,7 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     async def async_refresh_spectrums(self) -> None:
         """Reload spectrum gallery from the controller."""
+        self._mark_user_activity()
         try:
             spectrums = self._normalize_spectrums(await self.api.async_get_spectrums())
         except BeamsApiError as err:
@@ -1622,6 +1654,7 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self.async_set_channels(channels, ensure_manual=True, force_manual=True)
 
     async def async_set_mode(self, mode: str) -> None:
+        self._mark_user_activity()
         if mode == MODE_MANUAL:
             channels = self.get_saved_manual_channels()
             if max(channels or [0.0]) <= 0.0001:
@@ -1655,6 +1688,7 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         ensure_manual: bool = True,
         force_manual: bool = False,
     ) -> None:
+        self._mark_user_activity()
         channels = [clamp_channel(value) for value in channels]
         was_manual = self.is_manual
         if ensure_manual:
@@ -1687,6 +1721,7 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self.async_request_refresh()
 
     async def async_turn_off(self) -> None:
+        self._mark_user_activity()
         if self.is_manual and any(value > 0.0001 for value in self.channels):
             self.save_manual_channels(self.channels)
         channels = [0.0] * self.channel_count
@@ -1708,6 +1743,7 @@ class BeamsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_set_updated_data({**(self.data or {})})
 
     async def async_turn_on(self, brightness: int | None = None) -> None:
+        self._mark_user_activity()
         channels = self.get_saved_manual_channels()
         if max(channels or [0.0]) <= 0.0001:
             channels = self.get_default_manual_channels()

@@ -16,6 +16,7 @@ This project is not affiliated with, endorsed by, or supported by BeautifulReef 
 - Auto/manual mode and service-mode switches
 - Overall brightness and 10 spectral channel controls
 - Spectrum selector and refresh button for the controller gallery
+- Configurable idle polling interval, with fast polling after a user action
 - Configurable manual-mode duration from one to six hours and a remaining-time sensor
 - Current daily-cycle DLI sensor
 - Current PPFD sensors for `@25 cm`, `@35 cm`, and `@45 cm`
@@ -71,6 +72,10 @@ http://192.168.1.55
 ```
 
 No YAML configuration is required.
+
+### Polling interval
+
+Open the integration's **Configure** page to set the idle polling interval (5 to 3600 seconds; 10 seconds by default). After a user action, the controller is polled every 3 seconds for one minute before returning to the configured interval.
 
 ## Entities
 

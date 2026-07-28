@@ -6,6 +6,7 @@ from datetime import timedelta
 DOMAIN = "beams_light"
 DEFAULT_NAME = "BEAMS LED Light"
 DEFAULT_SCAN_INTERVAL = timedelta(seconds=3)
+DEFAULT_IDLE_SCAN_INTERVAL = timedelta(seconds=10)
 DEFAULT_TIMEOUT = 10
 
 CONF_MANUAL_CHANNELS = "manual_channels"
@@ -16,6 +17,7 @@ CONF_MANUAL_DURATION_HOURS = "manual_duration_hours"
 CONF_MANUAL_SESSION_DEADLINE = "manual_session_deadline"
 CONF_MANUAL_SESSION_RENEWED_AT = "manual_session_renewed_at"
 CONF_MANUAL_SPECTRUM_MODE = "manual_spectrum_mode"
+CONF_IDLE_SCAN_INTERVAL = "idle_scan_interval"
 
 MODE_AUTO = "auto"
 MODE_MANUAL = "manual"

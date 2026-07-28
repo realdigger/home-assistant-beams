@@ -8,12 +8,12 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import BeamsApiError, BeamsLightApi, normalize_base_url
-from .const import DEFAULT_NAME, DOMAIN
+from .const import CONF_IDLE_SCAN_INTERVAL, DEFAULT_IDLE_SCAN_INTERVAL, DEFAULT_NAME, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -126,4 +126,34 @@ class BeamsConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+        )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: config_entries.ConfigEntry) -> BeamsOptionsFlow:
+        """Create the options flow."""
+        return BeamsOptionsFlow()
+
+
+class BeamsOptionsFlow(config_entries.OptionsFlow):
+    """Handle BEAMS Light options."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+        """Manage polling options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        default_interval = self.config_entry.options.get(
+            CONF_IDLE_SCAN_INTERVAL,
+            int(DEFAULT_IDLE_SCAN_INTERVAL.total_seconds()),
+        )
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_IDLE_SCAN_INTERVAL, default=default_interval): vol.All(
+                        vol.Coerce(int), vol.Range(min=5, max=3600)
+                    )
+                }
+            ),
         )
