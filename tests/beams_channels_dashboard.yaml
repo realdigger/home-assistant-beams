@@ -1,7 +1,4 @@
 title: BEAMS
-resources:
-  - url: /beams_light_static/beams-channel-card.js
-    type: module
 views:
   - title: Светильник
     path: light
@@ -17,9 +14,39 @@ views:
           - entity: select.beams_2_pro_r_8_001_ruchnoi_rezhim_na
           - entity: sensor.beams_2_pro_r_8_001_until_auto_mode
           - entity: button.beams_2_pro_r_8_001_obnovit_spektry
+          - type: section
+            label: Показатели
+          - entity: sensor.beams_2_pro_r_8_001_estimated_power
+          - entity: sensor.beams_2_pro_r_8_001_current_cycle_dli
+          - entity: sensor.beams_2_pro_r_8_001_ppfd_25_cm
+          - entity: sensor.beams_2_pro_r_8_001_ppfd_35_cm
+          - entity: sensor.beams_2_pro_r_8_001_ppfd_45_cm
+          - entity: sensor.beams_2_pro_r_8_001_uptime
       - type: custom:beams-spectrum-card
         title: Текущий спектр
         entity: binary_sensor.beams_2_pro_r_8_001_light
+      - type: conditional
+        conditions:
+          - entity: switch.beams_2_pro_r_8_001_manual_mode
+            state: "off"
+        card:
+          type: markdown
+          title: Текущие уровни (Auto)
+          content: |
+            **Яркость:** {{ state_attr('binary_sensor.beams_2_pro_r_8_001_light', 'channels_percent') | max | round(2) }} %
+
+            | Канал | Уровень |
+            |:--|--:|
+            | CH1 | {{ state_attr('binary_sensor.beams_2_pro_r_8_001_light', 'channels_percent')[0] | round(2) }} % |
+            | CH2 | {{ state_attr('binary_sensor.beams_2_pro_r_8_001_light', 'channels_percent')[1] | round(2) }} % |
+            | CH3 | {{ state_attr('binary_sensor.beams_2_pro_r_8_001_light', 'channels_percent')[2] | round(2) }} % |
+            | CH4 | {{ state_attr('binary_sensor.beams_2_pro_r_8_001_light', 'channels_percent')[3] | round(2) }} % |
+            | CH5 | {{ state_attr('binary_sensor.beams_2_pro_r_8_001_light', 'channels_percent')[4] | round(2) }} % |
+            | CH6 | {{ state_attr('binary_sensor.beams_2_pro_r_8_001_light', 'channels_percent')[5] | round(2) }} % |
+            | CH7 | {{ state_attr('binary_sensor.beams_2_pro_r_8_001_light', 'channels_percent')[6] | round(2) }} % |
+            | CH8 | {{ state_attr('binary_sensor.beams_2_pro_r_8_001_light', 'channels_percent')[7] | round(2) }} % |
+            | CH9 | {{ state_attr('binary_sensor.beams_2_pro_r_8_001_light', 'channels_percent')[8] | round(2) }} % |
+            | CH10 | {{ state_attr('binary_sensor.beams_2_pro_r_8_001_light', 'channels_percent')[9] | round(2) }} % |
       - type: custom:beams-channel-card
         title: Каналы
         entities:

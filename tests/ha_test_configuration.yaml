@@ -19,10 +19,6 @@ script: !include scripts.yaml
 scene: !include scenes.yaml
 
 lovelace:
-  resource_mode: yaml
-  resources:
-    - url: /beams_light_static/beams-channel-card.js
-      type: module
   dashboards:
     beams-channels:
       mode: yaml

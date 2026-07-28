@@ -1,6 +1,7 @@
 """Number platform for BEAMS Light channel controls."""
 from __future__ import annotations
 
+from time import time
 from typing import Any
 
 from homeassistant.components.number import NumberEntity, NumberMode
@@ -41,10 +42,16 @@ class BeamsBrightnessNumber(BeamsEntity, NumberEntity):
     def __init__(self, coordinator: BeamsCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.entry.entry_id}_brightness"
+        self._last_rejected_at: float | None = None
 
     @property
     def native_value(self) -> float:
         return round(max(self.coordinator.channels or [0.0]) * 100.0, 2)
+
+    @property
+    def mode(self) -> NumberMode:
+        """Always present brightness as a slider in Home Assistant."""
+        return NumberMode.SLIDER
 
     @property
     def available(self) -> bool:
@@ -54,11 +61,12 @@ class BeamsBrightnessNumber(BeamsEntity, NumberEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return {
-            "mode": self.coordinator.mode,
+            "beams_mode": self.coordinator.mode,
             "editable": self.coordinator.mode == MODE_MANUAL
             and not self.coordinator.is_service_mode,
             "service_mode": self.coordinator.is_service_mode,
             "current_value": self.native_value,
+            "beams_last_rejected_at": self._last_rejected_at,
         }
 
     async def async_set_native_value(self, value: float) -> None:
@@ -66,9 +74,9 @@ class BeamsBrightnessNumber(BeamsEntity, NumberEntity):
             self.coordinator.mode != MODE_MANUAL
             or self.coordinator.is_service_mode
         ):
-            raise HomeAssistantError(
-                "Switch BEAMS mode to manual before changing brightness"
-            )
+            self._last_rejected_at = time()
+            self.async_write_ha_state()
+            return
         channels = self.coordinator.channels
         current_max = max(channels or [0.0])
         if current_max <= 0.0001:
@@ -97,6 +105,7 @@ class BeamsChannelNumber(BeamsEntity, NumberEntity):
         self.index = index
         self._attr_unique_id = f"{coordinator.entry.entry_id}_channel_{index + 1}"
         self._attr_name = f"CH{index + 1} {coordinator.channel_name(index)}"
+        self._last_rejected_at: float | None = None
 
     @property
     def native_value(self) -> float | None:
@@ -104,6 +113,11 @@ class BeamsChannelNumber(BeamsEntity, NumberEntity):
         if self.index >= len(channels):
             return None
         return round(channels[self.index] * 100.0, 2)
+
+    @property
+    def mode(self) -> NumberMode:
+        """Always present channel control as a slider in Home Assistant."""
+        return NumberMode.SLIDER
 
     @property
     def available(self) -> bool:
@@ -116,9 +130,10 @@ class BeamsChannelNumber(BeamsEntity, NumberEntity):
             "channel": self.index + 1,
             "editable": self.coordinator.mode == MODE_MANUAL
             and not self.coordinator.is_service_mode,
-            "mode": self.coordinator.mode,
+            "beams_mode": self.coordinator.mode,
             "service_mode": self.coordinator.is_service_mode,
             "current_value": self.native_value,
+            "beams_last_rejected_at": self._last_rejected_at,
         }
         color = self.coordinator.channel_color(self.index)
         if color is not None:
@@ -130,9 +145,9 @@ class BeamsChannelNumber(BeamsEntity, NumberEntity):
             self.coordinator.mode != MODE_MANUAL
             or self.coordinator.is_service_mode
         ):
-            raise HomeAssistantError(
-                "Switch BEAMS mode to manual before changing channels"
-            )
+            self._last_rejected_at = time()
+            self.async_write_ha_state()
+            return
         channels = self.coordinator.channels
         if not channels:
             channels = self.coordinator.get_default_manual_channels()
